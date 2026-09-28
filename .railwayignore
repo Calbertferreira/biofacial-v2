@@ -1,0 +1,12 @@
+.env
+.env.*
+.bootstrap-admin.txt
+.git
+.vercel
+.railway
+.deployment-tools
+node_modules
+**/node_modules
+.next
+**/.next
+**/dist

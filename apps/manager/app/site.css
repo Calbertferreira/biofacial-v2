@@ -1,0 +1,103 @@
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #272522; background: #f7f5f2; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+body > main, body > #__next > main { max-width: 920px; margin: 40px auto; padding: 0 24px; }
+
+.adminAuth, .adminDashboard, .adminLoading { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+.adminEyebrow { color: #ba5012; font-size: 11px; font-weight: 800; letter-spacing: .17em; }
+.adminAuth { display: grid; grid-template-columns: 52% 48%; min-height: 100vh; background: #faf9f7; }
+.adminAuthVisual { position: relative; min-height: 680px; color: white; background: #672807 url('/brand/event-crowd.png') center/cover; }
+.adminAuthVisual:before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg,rgba(38,16,5,.48),rgba(45,17,5,.08) 38%,rgba(31,18,13,.88)); }
+.adminAuthVisualInner { position: relative; height: 100%; min-height: 680px; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(36px,5vw,76px); }
+.adminAuthVisual img { width: 230px; max-width: 65%; mix-blend-mode: screen; }
+.adminAuthVisual .adminEyebrow { color: #ffc995; }
+.adminAuthVisual h1 { max-width: 650px; margin: 18px 0; font-size: clamp(44px,5vw,72px); line-height: 1.03; letter-spacing: -.065em; }
+.adminAuthVisual p { max-width: 470px; color: #f3e5d9; font-size: 18px; line-height: 1.55; }
+.adminAuthVisual small { letter-spacing: .18em; color: #ffe4ca; font-size: 11px; font-weight: 700; }
+.adminAuthRight { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 48px; }
+.adminAuthCard { width: min(100%, 440px); }
+.adminAuthCard h2 { margin: 18px 0 12px; font-size: clamp(34px,3.4vw,50px); line-height: 1.1; letter-spacing: -.055em; color: #24221f; }
+.adminAuthCard > p { margin: 0 0 38px; color: #79736d; line-height: 1.6; }
+.adminAuthCard form { display: grid; gap: 23px; }
+.adminAuthCard label, .adminDashboard label { display: flex; flex-direction: column; gap: 9px; font-size: 13px; font-weight: 700; color: #45413b; }
+.adminAuthCard input, .adminDashboard input:not([type=checkbox]), .adminDashboard select { display: block; width: 100%; min-height: 48px; padding: 12px 14px; color: #24211d; background: #fff; border: 1px solid #e4dfd9; border-radius: 9px; outline: none; transition: border-color .15s, box-shadow .15s; }
+.adminAuthCard input:focus, .adminDashboard input:focus, .adminDashboard select:focus { border-color: #bd5415; box-shadow: 0 0 0 3px #bd541520; }
+.adminAuthCard input::placeholder, .adminDashboard input::placeholder { color: #aaa39b; }
+.adminPasswordGroup { min-width: 0; }
+.adminPasswordGroup > label { display: block; margin-bottom: 9px; font-size: 13px; font-weight: 700; color: #45413b; }
+.adminPasswordField { position: relative; }
+.adminPasswordField input { padding-right: 50px !important; }
+.adminPasswordField .adminPasswordToggle, .adminDashboard form .adminPasswordToggle { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); display: grid; place-items: center; width: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: #716961; }
+.adminPasswordField .adminPasswordToggle:hover, .adminDashboard form .adminPasswordToggle:hover { transform: translateY(-50%); background: #f4eee9; color: #a84610; }
+.adminPasswordField .adminPasswordToggle:focus-visible { outline: 2px solid #bd5415; outline-offset: 2px; }
+.adminPrimary, .adminDashboard form button { min-height: 48px; padding: 12px 20px; border: 0; border-radius: 9px; color: #fff; background: #af480c; font-weight: 700; box-shadow: 0 8px 18px #af480c22; transition: background .15s, transform .15s; }
+.adminPrimary:hover, .adminDashboard form button:hover { background: #913909; transform: translateY(-1px); }
+.adminPrimary span { float: right; font-size: 20px; line-height: 16px; }
+.adminAuthCard form + small, .adminAuthCard > small { display: block; margin-top: 26px; text-align: center; color: #a09a93; font-size: 12px; }
+.adminCopyright { margin-top: 70px; color: #aaa39b; font-size: 12px; text-align: center; }
+.adminError, .adminSuccess { padding: 12px 16px; margin: 18px 0; border-radius: 8px; background: #fff1ec; color: #973b18; font-size: 13px; }
+.adminSuccess { background: #ebf7ed; color: #17682f; }
+.adminLoading { min-height: 100vh; display: grid; place-content: center; text-align: center; color: #835033; }
+.adminLoadingIcon { margin: auto; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 16px; color: #fff; background: #af480c; font-size: 36px; font-weight: 800; }
+
+.adminDashboard { display: grid; grid-template-columns: 250px minmax(0,1fr); min-height: 100vh; background: #f8f7f5; }
+.adminSidebar { position: sticky; top: 0; align-self: start; height: 100vh; display: flex; flex-direction: column; padding: 32px 18px 24px; background: #24211f; color: white; }
+.adminSidebar > img { width: 154px; margin: 0 10px 4px; mix-blend-mode: screen; }
+.adminSidebarProduct { margin: 0 10px 58px; color: #deae8a; font-size: 9px; font-weight: 800; letter-spacing: .18em; }
+.adminSidebarLabel { margin: 0 12px 14px; color: #8e8984; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.adminSidebar nav { display: grid; gap: 5px; }
+.adminSidebar nav a { padding: 13px 14px; border-radius: 9px; color: #c8c2bb; font-size: 14px; font-weight: 600; text-decoration: none; }
+.adminSidebar nav a:hover, .adminSidebar nav a:focus { color: #fff; background: #a84917; }
+.adminSidebarTip { margin-top: auto; padding: 18px; border: 1px solid #514239; border-radius: 12px; background: linear-gradient(135deg,#3a2b23,#2b2521); }
+.adminSidebarTip strong { font-size: 13px; }
+.adminSidebarTip p { margin: 8px 0 0; color: #b9aca2; font-size: 12px; line-height: 1.5; }
+.adminSidebarUser { display: flex; gap: 11px; align-items: center; margin-top: 23px; padding-top: 20px; border-top: 1px solid #3e3935; }
+.adminSidebarUser > span { width: 37px; height: 37px; display: grid; place-items: center; border-radius: 10px; background: #a84813; font-size: 12px; font-weight: 800; }
+.adminSidebarUser div { display: grid; gap: 2px; min-width: 0; }
+.adminSidebarUser strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.adminSidebarUser small { color: #a7a19b; font-size: 11px; }
+.adminMain { min-width: 0; }
+.adminTopbar { position: sticky; z-index: 2; top: 0; min-height: 73px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 clamp(22px,4vw,60px); border-bottom: 1px solid #ebe6e1; background: #fffcfaed; backdrop-filter: blur(12px); color: #807870; font-size: 13px; }
+.adminTopbar b { margin: 0 7px; color: #c4bcb4; }
+.adminTopbar > div { display: flex; align-items: center; gap: 11px; }
+.adminTopbar button { padding: 8px 11px; border: 1px solid #e8e1da; border-radius: 8px; background: white; color: #514a43; font-size: 12px; font-weight: 700; }
+.adminTopbar button:hover { border-color: #b44b0d; color: #a2420b; }
+.adminRole { padding: 7px 11px; border-radius: 100px; background: #f6e9df; color: #aa480e; font-size: 11px; font-weight: 800; }
+.adminContent { width: min(100%,1180px); margin: auto; padding: 40px clamp(22px,4vw,60px) 80px; }
+.adminIntro { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 27px; }
+.adminIntro h1 { margin: 9px 0 6px; color: #2b2926; font-size: clamp(34px,3.4vw,48px); line-height: 1.15; letter-spacing: -.05em; }
+.adminIntro h1 em { color: #d97020; font-style: normal; font-size: .6em; }
+.adminIntro p { margin: 0; color: #88817a; font-size: 14px; }
+.adminIntro time { color: #948b83; font-size: 12px; text-transform: capitalize; }
+.adminHero { position: relative; overflow: hidden; min-height: 270px; display: flex; align-items: center; border-radius: 17px; background: #a7470e url('/brand/event-crowd.png') center 48%/cover; color: #fff; }
+.adminHero:before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,#843507 0%,#9b3d08df 40%,#3b180648 100%); }
+.adminHero > div { position: relative; width: min(100%,580px); padding: 32px clamp(25px,4vw,49px); }
+.adminHero span { font-size: 10px; letter-spacing: .16em; font-weight: 800; color: #ffcfaa; }
+.adminHero h2 { margin: 12px 0 8px; font-size: clamp(25px,2.9vw,36px); line-height: 1.1; letter-spacing: -.04em; }
+.adminHero p { margin: 0 0 24px; color: #f8e2d1; font-size: 13px; line-height: 1.55; }
+.adminHero a { display: inline-block; padding: 11px 15px; border-radius: 8px; background: #fff; color: #993a08; font-size: 12px; font-weight: 800; text-decoration: none; }
+.adminStats { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin: 20px 0 52px; }
+.adminStats a { min-height: 150px; display: flex; flex-direction: column; align-items: flex-start; padding: 23px; border: 1px solid #ede9e4; border-radius: 13px; background: white; text-decoration: none; transition: box-shadow .15s, transform .15s; }
+.adminStats a:hover { box-shadow: 0 12px 30px #4b2e1214; transform: translateY(-2px); }
+.adminStats small { color: #847b72; font-size: 12px; font-weight: 700; }
+.adminStats strong { margin: 12px 0 auto; color: #2c2824; font-size: 36px; letter-spacing: -.06em; }
+.adminStats span { color: #ac4b15; font-size: 11px; font-weight: 800; }
+.adminDashboard section { scroll-margin-top: 90px; margin: 0 0 50px; }
+.adminSectionTitle { margin-bottom: 20px; }
+.adminSectionTitle h2 { margin: 8px 0 4px; font-size: 28px; letter-spacing: -.04em; }
+.adminSectionTitle p { margin: 0; color: #867e77; font-size: 13px; }
+.adminDashboard section form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin: 0 0 16px; padding: 24px; border: 1px solid #ece6df; border-radius: 13px; background: white; box-shadow: 0 4px 24px #2d201007; }
+.adminDashboard form button { align-self: end; }
+.adminDashboard fieldset { grid-column: 1/-1; display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 0; padding: 15px; border: 1px solid #e9e3dd; border-radius: 9px; }
+.adminDashboard legend { color: #6e6258; font-size: 12px; font-weight: 800; }
+.adminDashboard fieldset label { display: inline-flex; flex-direction: row; align-items: center; font-weight: 500; }
+.adminDashboard input[type=checkbox] { accent-color: #a84711; }
+.adminDashboard section > ul { overflow: hidden; margin: 0; padding: 0; border: 1px solid #ece6df; border-radius: 13px; background: white; list-style: none; }
+.adminDashboard section > ul li { padding: 17px 22px; border-bottom: 1px solid #f0ece7; color: #554f48; font-size: 13px; overflow-wrap: anywhere; }
+.adminDashboard section > ul li:last-child { border-bottom: 0; }
+.adminDashboard section > ul li:hover { background: #fcf9f6; }
+@media (max-width: 1000px) { .adminDashboard { grid-template-columns: 200px minmax(0,1fr); } .adminSidebar { padding-left: 12px; padding-right: 12px; } }
+@media (max-width: 750px) { .adminAuth { grid-template-columns: 1fr; } .adminAuthVisual { min-height: 260px; } .adminAuthVisualInner { min-height: 260px; padding: 25px; } .adminAuthVisual h1 { font-size: 34px; margin: 8px 0; } .adminAuthVisual p, .adminAuthVisual small { display: none; } .adminAuthVisual img { width: 150px; } .adminAuthRight { min-height: 550px; padding: 44px 25px 80px; } .adminCopyright { margin-top: 55px; } .adminDashboard { display: block; } .adminSidebar { position: static; width: 100%; height: auto; padding: 14px 20px; flex-direction: row; align-items: center; gap: 18px; } .adminSidebar > img { width: 104px; margin: 0; } .adminSidebarProduct, .adminSidebarLabel, .adminSidebarTip, .adminSidebarUser { display: none; } .adminSidebar nav { display: flex; overflow-x: auto; gap: 2px; } .adminSidebar nav a { flex: none; padding: 8px; font-size: 11px; } .adminTopbar { position: static; min-height: 58px; padding: 0 20px; } .adminContent { padding: 30px 20px 60px; } .adminStats { gap: 9px; } .adminStats a { min-height: 130px; padding: 14px; } }
+@media (max-width: 550px) { .adminSidebar { display: block; } .adminSidebar nav { margin-top: 12px; } .adminIntro time, .adminRole { display: none; } .adminTopbar button { font-size: 11px; } .adminHero { min-height: 290px; } .adminStats { grid-template-columns: repeat(3,minmax(0,1fr)); } .adminStats strong { font-size: 27px; } .adminStats small, .adminStats span { font-size: 10px; } .adminDashboard section form { grid-template-columns: 1fr; } }

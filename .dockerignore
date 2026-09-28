@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.next*
+**/.next*
+**/dist
+.env*
+!.env.example
+.bootstrap-admin.txt
+.git
+.vercel
+.railway
+.deployment-tools
+*.tsbuildinfo

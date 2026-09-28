@@ -1,0 +1,8 @@
+{
+  "name": "@biofacial/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "migrate": "node src/migrate.mjs", "migrate:local": "node --env-file=../../.env src/migrate.mjs", "verify:local": "node --env-file=../../.env src/verify.mjs", "bootstrap:local": "node --env-file=../../.env src/bootstrap-admin.mjs" },
+  "dependencies": { "pg": "^8.16.0" }
+}

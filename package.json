@@ -1,0 +1,16 @@
+{
+  "name": "biofacial-v2",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev:manager": "pnpm --filter @biofacial/manager dev",
+    "dev:invite": "pnpm --filter @biofacial/invite dev",
+    "dev:scanner": "pnpm --filter @biofacial/scanner dev",
+    "dev:api": "pnpm --filter @biofacial/api dev",
+    "demo:browser": "node --env-file=.env scripts/browser-demo.mjs",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test:e2e": "node --env-file=.env tests/e2e.mjs",
+    "test:rbac": "node --env-file=.env tests/auth-rbac.mjs"
+  }
+}
