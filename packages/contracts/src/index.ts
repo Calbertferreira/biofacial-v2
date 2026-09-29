@@ -27,7 +27,7 @@ export const acceptInvitationSchema = z.object({
   consent: z.literal(true),
   imageBase64: z.base64().max(2_000_000).optional(),
 });
-export const scanSchema = z.object({ imageBase64: z.base64().min(16).max(2_000_000) });
+export const scanSchema = z.object({ imageBase64: z.base64().min(16).max(2_000_000), direction: z.enum(['entry', 'exit']).optional() });
 
 export type CreateEvent = z.infer<typeof createEventSchema>;
 export type CreateGuest = z.infer<typeof createGuestSchema>;

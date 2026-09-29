@@ -1,34 +1,28 @@
-# Publicação de teste na web
+# Ambientes de teste publicados
 
-## Escopo desta prévia
+| Aplicação | URL | Hospedagem |
+| --- | --- | --- |
+| Manager | https://biofacial.vercel.app/admin | Vercel, projeto `biofacial`, pasta `apps/manager` |
+| Convite Facial | https://biofacial-convite.vercel.app | Vercel, projeto `biofacial-convite`, pasta `apps/invite` |
+| Scanner | https://biofacial-scanner.vercel.app | Vercel, projeto `biofacial-scanner`, pasta `apps/scanner` |
+| API | https://api-production-34f89.up.railway.app/health | Railway, serviço `api` |
+| Motor facial | sem URL pública | Railway, serviço `face-engine` |
 
-O Manager em `apps/manager` permite login e gestão de clientes, usuários e eventos. A API em `apps/api` é servida pelo Railway e usa o Neon. A prévia não valida reconhecimento facial: `services/face-engine` ainda não contém um modelo real. Sem `FACE_ENGINE_URL` e `FACE_ENGINE_TOKEN`, a API responde `503 face_engine_unavailable` nas operações biométricas. Sem `SCANNER_API_KEY`, o scanner responde `503 scanner_unavailable`.
+## Fluxo para testar
 
-O convite só deve ser habilitado quando o aplicativo `apps/invite` estiver publicado e sua URL estiver em `PUBLIC_BASE_URL`. Sem ela, a criação de convidados responde `503 invitation_app_unavailable` antes de inserir dados. Não configure `BROWSER_DEMO=true` em serviços públicos.
+1. Entre no Manager com uma conta `adm` ou `gestor` habilitada. Cadastre um cliente e um evento com horário que englobe o momento do teste.
+2. Abra o evento no Manager, cadastre um convidado e copie o link individual. Envie o link por WhatsApp ou e-mail usando o canal de sua escolha; o envio automático ainda não está implementado.
+3. No celular do convidado, abra o link, tire uma foto nítida de um único rosto, marque o consentimento e aceite o convite. Se houver modelo facial anterior associado ao mesmo e-mail ou telefone no mesmo cliente, a tela oferece confirmação sem nova foto.
+4. Ative o evento no Manager. Abra o Scanner pelo link na página do evento, entre com um usuário da aplicação que tenha acesso ao cliente e permita a câmera no tablet.
+5. Selecione o evento e identifique o convidado. A primeira identificação registra entrada e a segunda registra saída. Consulte os registros no Manager e finalize o evento quando terminar.
 
-## API no Railway
+## Configuração
 
-1. Crie um serviço de teste com o diretório raiz do monorepo. O `Dockerfile` na raiz instala as dependências, compila os contratos e a API e inicia `@biofacial/api`.
-2. Configure `DATABASE_URL` como variável secreta no serviço, preferencialmente apontando para uma branch de teste do Neon. A migração do banco deve ser aplicada antes da primeira publicação.
-3. Não configure as variáveis de biometria ou scanner enquanto seus serviços reais não estiverem disponíveis. Configure `PUBLIC_BASE_URL` apenas depois de publicar o aplicativo de convites.
-4. Configure o health check em `/health`, gere um domínio Railway e verifique que o retorno é HTTP 200 com `{ "status": "ok" }`.
+- A API usa `DATABASE_URL` para Neon, `PUBLIC_BASE_URL=https://biofacial-convite.vercel.app`, `FACE_ENGINE_URL=http://face-engine.railway.internal:8080` e `FACE_ENGINE_TOKEN` igual ao do motor facial. `BROWSER_DEMO` deve ficar desativado.
+- O motor facial usa `DATABASE_URL`, `FACE_ENGINE_TOKEN` e `FACE_TEMPLATE_KEY`. O último valor é uma chave Fernet persistente; perder essa chave torna os modelos já cadastrados ilegíveis. O serviço não precisa de domínio público.
+- Os três projetos Vercel usam `API_INTERNAL_URL` apontando para a API Railway. O Manager também usa `NEXT_PUBLIC_SCANNER_URL=https://biofacial-scanner.vercel.app`.
+- A migração `004_face_profiles.sql` deve estar aplicada antes de aceitar fotos.
 
-O serviço aceita a porta fornecida por `PORT` e escuta em `0.0.0.0`. A chave `ADMIN_API_KEY` só pertence à demonstração local e não é necessária na prévia pública.
+## Limites deste teste
 
-## Manager na Vercel
-
-1. Crie um projeto Vercel com o diretório raiz `apps/manager` e framework Next.js.
-2. Configure `API_INTERNAL_URL` como variável de servidor, com a URL HTTPS pública da API Railway, sem barra final.
-3. Faça uma publicação **Preview**. A rota `/` redireciona para `/admin`.
-4. Proteja a prévia com os controles de acesso da Vercel e use um usuário real de `app_users` para entrar. O cookie de sessão é `HttpOnly`, `SameSite=Lax` e `Secure` em produção.
-
-## Verificações após publicar
-
-- A API `/health` retorna 200.
-- O Manager `/` abre `/admin` e carrega a logomarca e a imagem.
-- Login, listagem de clientes, usuários e eventos funcionam para um administrador.
-- A criação de cliente e evento funciona com um usuário autorizado.
-- A API não aceita a chave de demonstração quando `BROWSER_DEMO` está ausente.
-- As rotas biométricas permanecem indisponíveis até conectar e validar um motor real.
-
-Não envie `.env`, `.bootstrap-admin.txt` ou fotos reais junto com o código. O `.dockerignore` exclui esses arquivos do build da API. Armazene segredos apenas nas variáveis de ambiente das plataformas.
+A identificação usa fotos reais e modelos YuNet/SFace. Ainda não há prova de vida nem envio automático de mensagens. Fotos ou vídeos apresentados à câmera podem enganar o reconhecimento; mantenha supervisão humana na entrada e confira manualmente casos `review`. Os limiares precisam ser calibrados no local e com participantes consentidos antes de operar controle físico sem acompanhamento. As imagens não são salvas; os modelos faciais são criptografados no Neon.

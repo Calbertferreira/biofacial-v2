@@ -10,3 +10,5 @@ node_modules
 .next
 **/.next
 **/dist
+**/.venv
+**/models

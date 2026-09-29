@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import AcceptButton from './AcceptButton';
 
-type Invitation = { guestName: string; invitationStatus: string; eventName: string; startsAt: string; endsAt: string; timezone: string; venue: string };
+type Invitation = { guestName: string; invitationStatus: string; hasFaceProfile: boolean; eventName: string; startsAt: string; endsAt: string; timezone: string; venue: string };
 
 export default async function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -11,13 +11,8 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
   if (response.status === 404) notFound();
   if (!response.ok) throw new Error('Não foi possível consultar o convite.');
   const invitation = await response.json() as Invitation;
-  return <main>
-    <h1>{invitation.eventName}</h1>
-    <p>Olá, {invitation.guestName}.</p>
-    <p>Local: {invitation.venue}</p>
-    <p>Início: {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeStyle: 'short', timeZone: invitation.timezone }).format(new Date(invitation.startsAt))}</p>
-    {process.env.BROWSER_DEMO === 'true'
-      ? <AcceptButton token={token} initialStatus={invitation.invitationStatus} />
-      : <><p>Situação do convite: {invitation.invitationStatus === 'pending' ? 'Pendente' : invitation.invitationStatus}</p><p>O cadastro facial pelo celular será liberado após a integração biométrica.</p></>}
+  return <main><header><span className="eyebrow">ALLTICKET · CONVITE INDIVIDUAL</span><h1>{invitation.eventName}</h1><p>Olá, {invitation.guestName}. Seu lugar está reservado.</p></header>
+    <div className="details"><div><small>LOCAL</small><strong>{invitation.venue}</strong></div><div><small>DATA E HORA</small><strong>{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeStyle: 'short', timeZone: invitation.timezone }).format(new Date(invitation.startsAt))}</strong></div></div>
+    <AcceptButton token={token} initialStatus={invitation.invitationStatus} hasFaceProfile={invitation.hasFaceProfile} />
   </main>;
 }

@@ -3,6 +3,8 @@ node_modules
 .next*
 **/.next*
 **/dist
+**/.venv
+**/models
 .env*
 !.env.example
 .bootstrap-admin.txt

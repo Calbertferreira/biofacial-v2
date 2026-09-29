@@ -167,7 +167,7 @@ export default function AdminPage() {
         <label>Fim <input name="endsAt" type="datetime-local" required /></label>{' '}
         <button>Cadastrar evento</button>
       </form>}
-      <ul>{events.map(item => <li key={item.id}>{item.name} · {clients.find(c => c.id === item.clientId)?.name ?? 'sem cliente'} · {item.status} · {item.id}</li>)}</ul>
+      <ul>{events.map(item => <li key={item.id}><a href={`/admin/events/${item.id}`}>{item.name} →</a> · {clients.find(c => c.id === item.clientId)?.name ?? 'sem cliente'} · {item.status}</li>)}</ul>
     </section>
     </div></div>
   </main>;

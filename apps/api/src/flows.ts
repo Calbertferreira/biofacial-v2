@@ -21,11 +21,32 @@ async function callFaceEngine(path: string, payload: unknown, config: Config): P
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10_000),
   });
+  if (response.status === 422 || response.status === 413) {
+    const problem = await response.json() as { detail?: string };
+    throw new FaceImageError(problem.detail ?? 'invalid_image', response.status);
+  }
   if (!response.ok) throw new Error(`Face engine failed: ${response.status}`);
   return response.json();
 }
 
+class FaceImageError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config): void {
+  app.post('/v1/events/:eventId/finish', async (request, reply) => {
+    const actor = await actorFor(request, db);
+    if (!actor) return reply.code(401).send({ error: 'unauthorized' });
+    if (actor.mustChangePassword || actor.role === 'staff') return reply.code(403).send({ error: 'forbidden' });
+    const eventId = eventIdSchema.safeParse((request.params as { eventId?: string }).eventId);
+    if (!eventId.success) return reply.code(400).send({ error: 'invalid_event_id' });
+    const event = await db.query(`SELECT client_id FROM events WHERE id = $1`, [eventId.data]);
+    if (!event.rowCount || !canWriteClient(actor, event.rows[0].client_id)) return reply.code(404).send({ error: 'event_not_found' });
+    const result = await db.query(`UPDATE events SET status = 'finished' WHERE id = $1 AND status = 'active' RETURNING id, status`, [eventId.data]);
+    if (!result.rowCount) return reply.code(409).send({ error: 'event_not_active' });
+    return result.rows[0];
+  });
+
   app.post('/v1/events/:eventId/activate', async (request, reply) => {
     const actor = await actorFor(request, db);
     if (!actor) return reply.code(401).send({ error: 'unauthorized' });
@@ -50,7 +71,8 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     if (!token.success || !body.success) return reply.code(400).send({ error: 'invalid_input' });
     const hash = createHash('sha256').update(token.data).digest('hex');
     const guestResult = await db.query(
-      `SELECT g.id, g.event_id, g.face_profile_id, g.invitation_status, e.status AS event_status
+      `SELECT g.id, g.event_id, g.face_profile_id, g.invitation_status, g.email, g.phone_e164,
+              e.client_id, e.status AS event_status
        FROM guests g JOIN events e ON e.id = g.event_id WHERE g.invitation_token_hash = $1`, [hash],
     );
     if (!guestResult.rowCount) return reply.code(404).send({ error: 'invitation_not_found' });
@@ -60,6 +82,18 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     }
     let profileId: string | null = guest.face_profile_id;
     if (!profileId) {
+      const previous = await db.query(
+        `SELECT prior.face_profile_id FROM guests prior JOIN events pe ON pe.id = prior.event_id
+         WHERE prior.id <> $1 AND pe.client_id = $2 AND prior.face_profile_id IS NOT NULL
+           AND prior.invitation_status = 'accepted'
+           AND (($3::text IS NOT NULL AND lower(prior.email) = lower($3::text))
+             OR ($3::text IS NULL AND $4::text IS NOT NULL AND prior.phone_e164 = $4::text))
+         ORDER BY prior.accepted_at DESC LIMIT 1`,
+        [guest.id, guest.client_id, guest.email, guest.phone_e164],
+      );
+      profileId = previous.rows[0]?.face_profile_id ?? null;
+    }
+    if (!profileId) {
       if (!body.data.imageBase64) return reply.code(422).send({ error: 'face_capture_required' });
       try {
         const response = await callFaceEngine('/v1/enroll', {
@@ -67,6 +101,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
         }, config);
         profileId = enrollResponse.parse(response).profileId;
       } catch (error) {
+        if (error instanceof FaceImageError) return reply.code(error.status).send({ error: error.message });
         app.log.error({ err: error }, 'Face enrollment failed');
         return reply.code(503).send({ error: 'face_engine_unavailable' });
       }
@@ -99,13 +134,16 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
   });
 
   app.post('/v1/events/:eventId/scan', async (request, reply) => {
-    if (!config.scannerKey) return reply.code(503).send({ error: 'scanner_unavailable' });
-    if (!matchesKey(request.headers.authorization, config.scannerKey)) return reply.code(401).send({ error: 'unauthorized' });
+    const keyAuthorized = !!config.scannerKey && matchesKey(request.headers.authorization, config.scannerKey);
+    const actor = keyAuthorized ? null : await actorFor(request, db);
+    if (!keyAuthorized && !actor) return reply.code(401).send({ error: 'unauthorized' });
+    if (actor?.mustChangePassword) return reply.code(403).send({ error: 'password_change_required' });
     const eventId = eventIdSchema.safeParse((request.params as { eventId?: string }).eventId);
     const body = scanSchema.safeParse(request.body);
     if (!eventId.success || !body.success) return reply.code(400).send({ error: 'invalid_input' });
-    const event = await db.query(`SELECT status, starts_at, ends_at FROM events WHERE id = $1`, [eventId.data]);
+    const event = await db.query(`SELECT client_id, status, starts_at, ends_at FROM events WHERE id = $1`, [eventId.data]);
     if (!event.rowCount) return reply.code(404).send({ error: 'event_not_found' });
+    if (actor && !canReadClient(actor, event.rows[0].client_id)) return reply.code(403).send({ error: 'forbidden_client' });
     const now = Date.now();
     if (event.rows[0].status !== 'active' || now < new Date(event.rows[0].starts_at).getTime() || now > new Date(event.rows[0].ends_at).getTime()) {
       return reply.code(409).send({ error: 'event_not_active' });
@@ -116,6 +154,10 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
         eventId: eventId.data, imageBase64: body.data.imageBase64,
       }, config));
     } catch (error) {
+      if (error instanceof FaceImageError) {
+        await db.query(`INSERT INTO access_events (event_id, action, reason) VALUES ($1, 'denied', 'invalid_capture')`, [eventId.data]);
+        return reply.code(error.status).send({ error: error.message });
+      }
       app.log.error({ err: error }, 'Face identification failed');
       return reply.code(503).send({ error: 'face_engine_unavailable' });
     }
@@ -144,7 +186,14 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
         `SELECT action FROM access_events WHERE event_id = $1 AND guest_id = $2 AND action IN ('entry', 'exit')
          ORDER BY created_at DESC, id DESC LIMIT 1`, [eventId.data, identification.guestId],
       );
-      const action = last.rows[0]?.action === 'entry' ? 'exit' : 'entry';
+      const current = last.rows[0]?.action === 'entry' ? 'inside' : 'outside';
+      if (body.data.direction === 'entry' && current === 'inside' || body.data.direction === 'exit' && current === 'outside') {
+        const reason = current === 'inside' ? 'already_inside' : 'not_inside';
+        await client.query(`INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', $3, $4)`, [eventId.data, identification.guestId, reason, identification.confidence]);
+        await client.query('COMMIT');
+        return { action: 'denied', reason, guestId: identification.guestId, guestName: guest.rows[0].name };
+      }
+      const action = body.data.direction ?? (current === 'inside' ? 'exit' : 'entry');
       const inserted = await client.query(
         `INSERT INTO access_events (event_id, guest_id, action, confidence) VALUES ($1, $2, $3, $4)
          RETURNING id, created_at AS "createdAt"`,
@@ -193,6 +242,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     try {
       identification = identifyResponse.parse(await callFaceEngine('/v1/identify', { eventId: eventId.data, imageBase64 }, config));
     } catch (error) {
+      if (error instanceof FaceImageError) return reply.code(error.status).send({ error: error.message });
       app.log.error({ err: error }, 'Face lookup failed');
       return reply.code(503).send({ error: 'face_engine_unavailable' });
     }

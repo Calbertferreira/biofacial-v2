@@ -177,6 +177,13 @@ app.get('/v1/invitations/:token', async (request, reply) => {
   const hash = createHash('sha256').update(token.data).digest('hex');
   const result = await db.query(
     `SELECT g.name AS "guestName", g.invitation_status AS "invitationStatus",
+            (g.face_profile_id IS NOT NULL OR EXISTS (
+              SELECT 1 FROM guests prior JOIN events pe ON pe.id = prior.event_id
+              WHERE prior.id <> g.id AND pe.client_id = e.client_id AND prior.face_profile_id IS NOT NULL
+                AND prior.invitation_status = 'accepted'
+                AND ((g.email IS NOT NULL AND lower(prior.email) = lower(g.email))
+                  OR (g.email IS NULL AND g.phone_e164 IS NOT NULL AND prior.phone_e164 = g.phone_e164))
+            )) AS "hasFaceProfile",
             e.name AS "eventName", e.starts_at AS "startsAt", e.ends_at AS "endsAt",
             e.timezone, e.venue
        FROM guests g JOIN events e ON e.id = g.event_id
