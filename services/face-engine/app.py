@@ -115,7 +115,7 @@ def identify(payload: FaceRequest, authorization: str | None = Header(default=No
         rows = conn.execute(
             """SELECT g.id, p.embedding_ciphertext FROM guests g
                  JOIN face_profiles p ON p.id::text = g.face_profile_id
-                WHERE g.event_id = %s AND g.invitation_status = 'accepted' AND p.model = %s""",
+                WHERE g.event_id = %s AND g.invitation_status IN ('accepted', 'attended') AND p.model = %s""",
             (payload.eventId, MODEL),
         ).fetchall()
     scores = []
