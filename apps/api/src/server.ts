@@ -5,6 +5,7 @@ import { createEventSchema, createGuestSchema, eventIdSchema, inviteTokenSchema 
 import { registerFlows } from './flows.js';
 import { registerAuth } from './auth.js';
 import { registerManagement } from './management.js';
+import { registerInvitationDelivery } from './invitation-delivery.js';
 import { actorFor, canWriteClient } from './security.js';
 import { z } from 'zod';
 
@@ -180,14 +181,14 @@ app.get('/v1/invitations/:token', async (request, reply) => {
             (g.face_profile_id IS NOT NULL OR EXISTS (
               SELECT 1 FROM guests prior JOIN events pe ON pe.id = prior.event_id
               WHERE prior.id <> g.id AND pe.client_id = e.client_id AND prior.face_profile_id IS NOT NULL
-                AND prior.invitation_status = 'accepted'
+                AND prior.invitation_status IN ('accepted', 'attended')
                 AND ((g.email IS NOT NULL AND lower(prior.email) = lower(g.email))
                   OR (g.email IS NULL AND g.phone_e164 IS NOT NULL AND prior.phone_e164 = g.phone_e164))
             )) AS "hasFaceProfile",
             e.name AS "eventName", e.starts_at AS "startsAt", e.ends_at AS "endsAt",
             e.timezone, e.venue
        FROM guests g JOIN events e ON e.id = g.event_id
-      WHERE g.invitation_token_hash = $1`,
+      WHERE g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1)`,
     [hash],
   );
   if (!result.rowCount) return reply.code(404).send({ error: 'invitation_not_found' });
@@ -197,6 +198,7 @@ app.get('/v1/invitations/:token', async (request, reply) => {
 
 registerAuth(app, db);
 registerManagement(app, db);
+registerInvitationDelivery(app, db, publicBaseUrl);
 registerFlows(app, db, { scannerKey: scannerApiKey, faceEngineUrl, faceEngineToken });
 
 app.setErrorHandler((error, _request, reply) => {

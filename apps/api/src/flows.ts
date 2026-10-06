@@ -73,7 +73,8 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     const guestResult = await db.query(
       `SELECT g.id, g.event_id, g.face_profile_id, g.invitation_status, g.email, g.phone_e164,
               e.client_id, e.status AS event_status
-       FROM guests g JOIN events e ON e.id = g.event_id WHERE g.invitation_token_hash = $1`, [hash],
+       FROM guests g JOIN events e ON e.id = g.event_id
+       WHERE g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1)`, [hash],
     );
     if (!guestResult.rowCount) return reply.code(404).send({ error: 'invitation_not_found' });
     const guest = guestResult.rows[0];
@@ -85,7 +86,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
       const previous = await db.query(
         `SELECT prior.face_profile_id FROM guests prior JOIN events pe ON pe.id = prior.event_id
          WHERE prior.id <> $1 AND pe.client_id = $2 AND prior.face_profile_id IS NOT NULL
-           AND prior.invitation_status = 'accepted'
+           AND prior.invitation_status IN ('accepted', 'attended')
            AND (($3::text IS NOT NULL AND lower(prior.email) = lower($3::text))
              OR ($3::text IS NULL AND $4::text IS NOT NULL AND prior.phone_e164 = $4::text))
          ORDER BY prior.accepted_at DESC LIMIT 1`,
@@ -112,7 +113,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
       const updated = await client.query(
         `UPDATE guests SET face_profile_id = COALESCE(face_profile_id, $2),
                             invitation_status = 'accepted', accepted_at = COALESCE(accepted_at, now())
-         WHERE id = $1 AND invitation_status IN ('pending', 'accepted') RETURNING id, event_id, invitation_status`,
+         WHERE id = $1 AND invitation_status IN ('registered', 'invited', 'accepted') RETURNING id, event_id, invitation_status`,
         [guest.id, profileId],
       );
       if (!updated.rowCount) {
@@ -174,7 +175,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
         `SELECT id, name, invitation_status, face_profile_id FROM guests
          WHERE id = $1 AND event_id = $2 FOR UPDATE`, [identification.guestId, eventId.data],
       );
-      if (!guest.rowCount || guest.rows[0].invitation_status !== 'accepted' || !guest.rows[0].face_profile_id) {
+      if (!guest.rowCount || !['accepted', 'attended'].includes(guest.rows[0].invitation_status) || !guest.rows[0].face_profile_id) {
         await client.query(
           `INSERT INTO access_events (event_id, action, reason, confidence) VALUES ($1, 'denied', 'guest_not_eligible', $2)`,
           [eventId.data, identification.confidence],
@@ -199,6 +200,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
          RETURNING id, created_at AS "createdAt"`,
         [eventId.data, identification.guestId, action, identification.confidence],
       );
+      if (action === 'entry') await client.query("UPDATE guests SET invitation_status = 'attended' WHERE id = $1 AND invitation_status = 'accepted'", [identification.guestId]);
       await client.query('COMMIT');
       return { action, guestId: identification.guestId, guestName: guest.rows[0].name, ...inserted.rows[0] };
     } catch (error) {
@@ -249,7 +251,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     reply.header('Cache-Control', 'no-store');
     if (identification.status !== 'match') return { matched: false, reason: identification.status };
     const guest = await db.query(
-      `SELECT id, name FROM guests WHERE id = $1 AND event_id = $2 AND invitation_status = 'accepted' AND face_profile_id IS NOT NULL`,
+      `SELECT id, name FROM guests WHERE id = $1 AND event_id = $2 AND invitation_status IN ('accepted', 'attended') AND face_profile_id IS NOT NULL`,
       [identification.guestId, eventId.data],
     );
     if (!guest.rowCount) return { matched: false, reason: 'not_invited' };

@@ -28,8 +28,9 @@ export default function AcceptButton({ token, initialStatus, hasFaceProfile }: {
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  if (status === 'attended') return <div className="success" role="status"><h2>Presença registrada</h2><p>Sua entrada no evento foi registrada.</p></div>;
   if (status === 'accepted') return <div className="success" role="status"><h2>Presença confirmada</h2><p>Seu convite está aceito. Apresente seu rosto na entrada do evento.</p></div>;
-  if (status !== 'pending') return <p>Este convite não está disponível.</p>;
+  if (status !== 'registered' && status !== 'invited') return <p>Este convite não está disponível.</p>;
 
   return <section className="card">
     <h2>Confirme sua presença</h2>

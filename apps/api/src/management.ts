@@ -218,8 +218,13 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
     const event = await db.query(`SELECT client_id FROM events WHERE id = $1`, [id.data]);
     if (!event.rowCount || !canReadClient(actor, event.rows[0].client_id)) return reply.code(404).send({ error: 'event_not_found' });
     const result = await db.query(
-      `SELECT id, name, email, phone_e164 AS "phoneE164", invitation_status AS "invitationStatus", accepted_at AS "acceptedAt"
-       FROM guests WHERE event_id = $1 ORDER BY created_at DESC LIMIT 500`, [id.data],
+      `SELECT g.id, g.name, g.email, g.phone_e164 AS "phoneE164", g.invitation_status AS "invitationStatus",
+              g.accepted_at AS "acceptedAt", g.send_attempts AS "sendAttempts",
+              COALESCE((SELECT json_agg(json_build_object('id', d.id, 'attemptNumber', d.attempt_number,
+                'channel', d.channel, 'status', d.status, 'createdAt', d.created_at,
+                'providerMessageId', d.provider_message_id, 'error', d.error_message)
+                ORDER BY d.created_at DESC) FROM invitation_deliveries d WHERE d.guest_id = g.id), '[]'::json) AS deliveries
+       FROM guests g WHERE g.event_id = $1 ORDER BY g.created_at DESC LIMIT 500`, [id.data],
     );
     return { items: result.rows };
   });

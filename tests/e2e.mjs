@@ -94,7 +94,7 @@ try {
   });
   const token = new URL(guest.invitationUrl).pathname.split('/').at(-1);
   const pending = await call(base, `/v1/invitations/${token}`);
-  if (pending.invitationStatus !== 'pending' || pending.guestName !== 'Convidado E2E') throw new Error('Convite inicial incorreto');
+  if (pending.invitationStatus !== 'registered' || pending.guestName !== 'Convidado E2E') throw new Error('Convite inicial incorreto');
 
   const accepted = await call(base, `/v1/invitations/${token}/accept`, {
     method: 'POST', body: { consent: true, imageBase64: faceImage },
@@ -118,6 +118,8 @@ try {
   });
   if (denied.action !== 'denied' || entry.action !== 'entry' || exit.action !== 'exit') throw new Error('Sequência de acesso incorreta');
   if (entry.guestId !== guest.id || exit.guestId !== guest.id) throw new Error('Identidade do convidado incorreta');
+  const afterEntry = await call(base, `/v1/events/${event.id}/guests`, { key: process.env.ADMIN_API_KEY });
+  if (afterEntry.items.find(item => item.id === guest.id)?.invitationStatus !== 'attended') throw new Error('Status de comparecimento não atualizado');
   const history = await call(base, `/v1/events/${event.id}/access-events`, { key: process.env.ADMIN_API_KEY });
   if (history.items.map(item => item.action).join(',') !== 'denied,entry,exit') throw new Error('Histórico de acesso incorreto');
 
