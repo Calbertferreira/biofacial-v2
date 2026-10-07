@@ -60,7 +60,16 @@ export function registerAuth(app: FastifyInstance, db: pg.Pool): void {
     const actor = await actorFor(request, db);
     if (!actor?.sessionHash) return reply.code(401).send({ error: 'unauthorized' });
     const parsed = changeSchema.safeParse(request.body);
-    if (!parsed.success || parsed.data.currentPassword === parsed.data.newPassword) return reply.code(400).send({ error: 'invalid_input' });
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const error = issue?.path[0] === 'newPassword'
+        ? issue.code === 'too_small' ? 'new_password_too_short' : issue.code === 'too_big' ? 'new_password_too_long' : 'new_password_required'
+        : 'current_password_required';
+      return reply.code(400).send({ error });
+    }
+    if (parsed.data.currentPassword === parsed.data.newPassword) {
+      return reply.code(400).send({ error: 'new_password_must_differ' });
+    }
     const result = await db.query(`SELECT password_hash FROM app_users WHERE id = $1`, [actor.id]);
     if (!result.rowCount || !(await verifyPassword(parsed.data.currentPassword, result.rows[0].password_hash))) {
       return reply.code(401).send({ error: 'invalid_credentials' });

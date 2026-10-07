@@ -16,11 +16,12 @@ async function api(path: string, method = 'GET', body?: unknown) {
   return data;
 }
 
-function PasswordField({ label, name, autoComplete, minLength, placeholder }: {
+function PasswordField({ label, name, autoComplete, minLength, maxLength, placeholder }: {
   label: string;
   name: string;
   autoComplete?: string;
   minLength?: number;
+  maxLength?: number;
   placeholder?: string;
 }) {
   const [visible, setVisible] = useState(false);
@@ -29,7 +30,7 @@ function PasswordField({ label, name, autoComplete, minLength, placeholder }: {
     <label htmlFor={name}>{label}</label>
     <div className="adminPasswordField">
       <input id={name} name={name} type={visible ? 'text' : 'password'} required
-        autoComplete={autoComplete} minLength={minLength} placeholder={placeholder} />
+        autoComplete={autoComplete} minLength={minLength} maxLength={maxLength} placeholder={placeholder} />
       <button type="button" className="adminPasswordToggle"
         onClick={() => setVisible(current => !current)}
         aria-label={`${visible ? 'Ocultar' : 'Mostrar'} ${label.toLowerCase()}`}
@@ -96,11 +97,30 @@ export default function AdminPage() {
     <div className="adminAuthVisual"><div className="adminAuthVisualInner"><img src="/brand/allticket-logo.png" alt="AllTicket Controle de Público" /><div><span className="adminEyebrow">PRIMEIRO ACESSO</span><h1>O seu evento começa com uma boa experiência.</h1><p>Convites, pessoas e acessos conectados em um só lugar.</p></div><small>ALLTICKET · MANAGER</small></div></div>
     <div className="adminAuthRight"><div className="adminAuthCard"><span className="adminEyebrow">SEGURANÇA DA CONTA</span><h2>Proteja sua conta.</h2><p>Olá, {user.name}. Defina uma senha pessoal para continuar.</p>
     <form onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(async () => {
-      await api('/api/session/change-password', 'POST', { currentPassword: form.get('currentPassword'), newPassword: form.get('newPassword') });
+      const currentPassword = String(form.get('currentPassword') ?? '');
+      const newPassword = String(form.get('newPassword') ?? '');
+      if (newPassword.length < 12) throw new Error('A nova senha precisa ter pelo menos 12 caracteres.');
+      if (newPassword.length > 128) throw new Error('A nova senha pode ter no máximo 128 caracteres.');
+      if (currentPassword === newPassword) throw new Error('A nova senha deve ser diferente da senha temporária.');
+      try {
+        await api('/api/session/change-password', 'POST', { currentPassword, newPassword });
+      } catch (cause) {
+        const code = cause instanceof Error ? cause.message : '';
+        const descriptions: Record<string, string> = {
+          current_password_required: 'Informe a senha temporária.',
+          new_password_required: 'Informe a nova senha.',
+          new_password_too_short: 'A nova senha precisa ter pelo menos 12 caracteres.',
+          new_password_too_long: 'A nova senha pode ter no máximo 128 caracteres.',
+          new_password_must_differ: 'A nova senha deve ser diferente da senha temporária.',
+          invalid_credentials: 'A senha temporária está incorreta.',
+        };
+        throw new Error(descriptions[code] ?? 'Não foi possível alterar a senha. Tente novamente.');
+      }
       setUser(null); setMessage('Senha alterada. Entre novamente.');
     }); }}>
       <PasswordField label="Senha temporária" name="currentPassword" autoComplete="current-password" />
-      <PasswordField label="Nova senha" name="newPassword" minLength={12} autoComplete="new-password" placeholder="Pelo menos 12 caracteres" />
+      <PasswordField label="Nova senha" name="newPassword" minLength={12} maxLength={128} autoComplete="new-password" placeholder="De 12 a 128 caracteres" />
+      <p>Use de 12 a 128 caracteres. A nova senha pode conter letras, números e símbolos e deve ser diferente da senha temporária.</p>
       <button className="adminPrimary">Alterar senha <span>→</span></button>
     </form>{error && <p role="alert" className="adminError">{error}</p>}</div><span className="adminCopyright">© {new Date().getFullYear()} AllTicket · Controle de Público</span></div>
   </main>;
