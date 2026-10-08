@@ -5,6 +5,7 @@ import os
 import socket
 from contextlib import contextmanager
 from pathlib import Path
+from threading import Lock
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -23,8 +24,9 @@ CIPHER = Fernet(os.environ["FACE_TEMPLATE_KEY"].encode())
 if len(TOKEN) < 32:
     raise RuntimeError("FACE_ENGINE_TOKEN must contain at least 32 characters")
 
-detector = cv2.FaceDetectorYN.create(str(MODEL_DIR / "yunet.onnx"), "", (320, 320), 0.9, 0.3, 5000)
+detector = cv2.FaceDetectorYN.create(str(MODEL_DIR / "yunet.onnx"), "", (320, 320), 0.75, 0.3, 5000)
 recognizer = cv2.FaceRecognizerSF.create(str(MODEL_DIR / "sface.onnx"), "")
+model_lock = Lock()
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 
@@ -66,15 +68,18 @@ def extract(image_base64: str) -> np.ndarray:
     if max(width, height) > 1600:
         scale = 1600 / max(width, height)
         image = cv2.resize(image, (round(width * scale), round(height * scale)))
-    detector.setInputSize((image.shape[1], image.shape[0]))
-    _, faces = detector.detect(image)
-    if faces is None or len(faces) != 1:
-        raise HTTPException(422, "exactly_one_face_required")
-    face = faces[0]
-    if min(face[2], face[3]) < 100:
-        raise HTTPException(422, "face_too_small")
-    aligned = recognizer.alignCrop(image, face)
-    feature = recognizer.feature(aligned).flatten().astype(np.float32)
+    with model_lock:
+        detector.setInputSize((image.shape[1], image.shape[0]))
+        _, faces = detector.detect(image)
+        if faces is None or len(faces) == 0:
+            raise HTTPException(422, "face_not_found")
+        if len(faces) > 1:
+            raise HTTPException(422, "multiple_faces")
+        face = faces[0]
+        if min(face[2], face[3]) < 100:
+            raise HTTPException(422, "face_too_small")
+        aligned = recognizer.alignCrop(image, face)
+        feature = recognizer.feature(aligned).flatten().astype(np.float32)
     feature /= np.linalg.norm(feature)
     return feature
 

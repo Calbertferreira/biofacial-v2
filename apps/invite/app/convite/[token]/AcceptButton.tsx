@@ -6,6 +6,8 @@ const messages: Record<string, string> = {
   invalid_image: 'A imagem não pôde ser processada. Tire outra foto.',
   face_too_small: 'Aproxime o rosto da câmera e tente novamente.',
   image_too_small: 'A foto está pequena. Tire outra com melhor resolução.',
+  face_not_found: 'Não detectamos um rosto na foto. Olhe de frente para a câmera, sem cobrir o rosto, e tente novamente.',
+  multiple_faces: 'Detectamos mais de um rosto. Tire a foto sozinho, sem pessoas ou retratos ao fundo.',
   exactly_one_face_required: 'A foto deve mostrar apenas um rosto, bem iluminado.',
   face_engine_unavailable: 'O reconhecimento está indisponível. Tente novamente em instantes.',
   invitation_unavailable: 'Este convite não está mais disponível.',
