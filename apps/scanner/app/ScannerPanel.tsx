@@ -1,15 +1,54 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 
-type Event = { id: string; name: string; status: string; startsAt: string };
+type Event = { id: string; name: string; status: string; startsAt: string; endsAt: string; timezone: string };
 type User = { name: string; mustChangePassword?: boolean };
 type Result = { action: 'entry' | 'exit' | 'denied'; reason?: string; guestName?: string };
+
+function formatEventTime(value: string, timezone?: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'horário informado pelo organizador';
+  try {
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeStyle: 'short', timeZone: timezone || 'America/Sao_Paulo' }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeStyle: 'short' }).format(date);
+  }
+}
+
+const errorMessages: Record<string, string> = {
+  unauthorized: 'Sua sessão terminou. Entre novamente para usar o scanner.',
+  invalid_credentials: 'E-mail ou senha incorretos. Confira os dados e tente novamente.',
+  invalid_input: 'Os dados enviados não são válidos. Atualize a página e tente novamente.',
+  event_not_found: 'Este evento não foi encontrado. Selecione outro evento.',
+  event_not_active: 'Este evento não está disponível para registrar entradas. Consulte o organizador.',
+  event_ended: 'O período deste evento já terminou. Não é mais possível registrar entradas.',
+  face_not_found: 'Não detectamos um rosto. Olhe de frente para a câmera e tente novamente.',
+  multiple_faces: 'A câmera detectou mais de um rosto. Fique sozinho diante dela e tente novamente.',
+  face_too_small: 'Aproxime o rosto da câmera e tente novamente.',
+  invalid_image: 'Não foi possível analisar a imagem. Tente capturar novamente.',
+  face_engine_unavailable: 'O reconhecimento facial está indisponível no momento. Tente novamente em instantes.',
+};
 
 async function json(path: string, options?: RequestInit) {
   const response = await fetch(path, options);
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`);
+  if (!response.ok) {
+    if (body.error === 'event_not_started') {
+      const start = body.startsAt ? ` O registro será liberado em ${formatEventTime(body.startsAt, body.timezone)}.` : '';
+      throw new Error(`Ainda não chegou o dia e horário marcados para este evento.${start}`);
+    }
+    throw new Error(errorMessages[body.error] ?? 'Não foi possível concluir a operação. Tente novamente ou procure o organizador.');
+  }
   return body;
+}
+
+function resultMessage(result: Result): string {
+  if (result.reason === 'already_inside') return `${result.guestName ?? 'Este convidado'} já entrou no evento.`;
+  if (result.reason === 'not_inside') return `${result.guestName ?? 'Este convidado'} ainda não registrou entrada.`;
+  if (result.reason === 'no_match') return 'Não encontramos este rosto entre os convidados do evento.';
+  if (result.reason === 'review') return 'A identificação não foi conclusiva. Confira o convite com o organizador.';
+  if (result.reason === 'guest_not_eligible') return 'O rosto foi identificado, mas o convite não está aceito para este evento.';
+  return result.guestName ?? 'Acesso negado. Confira o convite com o organizador.';
 }
 
 export default function ScannerPanel({ initialEventId }: { initialEventId: string }) {
@@ -22,6 +61,7 @@ export default function ScannerPanel({ initialEventId }: { initialEventId: strin
   const [cameraReady, setCameraReady] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
+  const selectedEvent = events.find(item => item.id === eventId);
 
   useEffect(() => { void (async () => {
     try { const current = await json('/api/session/me'); setUser(current); setEvents((await json('/api/events')).items); }
@@ -62,10 +102,11 @@ export default function ScannerPanel({ initialEventId }: { initialEventId: strin
 
   if (user.mustChangePassword) return <section className="panel"><p>Altere sua senha no Manager antes de operar o scanner.</p></section>;
   return <section className="panel"><div className="toolbar"><span>Operador: {user.name}</span><button className="secondary" onClick={async () => { await json('/api/session/logout', { method: 'POST' }); setUser(null); stream.current?.getTracks().forEach(track => track.stop()); setCameraReady(false); }}>Sair</button></div>
-    <label>Evento ativo<select value={eventId} onChange={event => { setEventId(event.target.value); setResult(null); }}><option value="">Selecione um evento</option>{events.filter(item => item.status === 'active').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+    <label>Evento ativo<select value={eventId} onChange={event => { setEventId(event.target.value); setResult(null); setError(''); }}><option value="">Selecione um evento</option>{events.filter(item => item.status === 'active').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+    {selectedEvent && <p className="eventSchedule">Entradas e saídas disponíveis de {formatEventTime(selectedEvent.startsAt, selectedEvent.timezone)} até {formatEventTime(selectedEvent.endsAt, selectedEvent.timezone)}.</p>}
     <div className="camera"><video ref={video} playsInline muted autoPlay /></div>
     {!cameraReady ? <button onClick={() => void startCamera()}>Abrir câmera</button> : <div className="scanButtons"><button disabled={busy || !eventId} onClick={() => void scan('entry')}>{busy ? 'Identificando...' : 'Registrar entrada'}</button><button disabled={busy || !eventId} onClick={() => void scan('exit')}>{busy ? 'Identificando...' : 'Registrar saída'}</button></div>}
-    {result && <div className={`result ${result.action}`} role="status"><strong>{result.action === 'entry' ? 'ENTRADA AUTORIZADA' : result.action === 'exit' ? 'SAÍDA REGISTRADA' : 'ACESSO NEGADO'}</strong><p>{result.reason === 'already_inside' ? `${result.guestName} já está dentro do evento.` : result.reason === 'not_inside' ? `${result.guestName} ainda não entrou no evento.` : result.guestName ?? (result.reason === 'no_match' ? 'Rosto não encontrado na lista de convidados.' : result.reason === 'review' ? 'Identificação inconclusiva. Confira o convite manualmente.' : result.reason)}</p></div>}
+    {result && <div className={`result ${result.action}`} role="status"><strong>{result.action === 'entry' ? 'ENTRADA AUTORIZADA' : result.action === 'exit' ? 'SAÍDA REGISTRADA' : 'ACESSO NEGADO'}</strong><p>{resultMessage(result)}</p></div>}
     {error && <p role="alert" className="error">{error}</p>}
   </section>;
 }

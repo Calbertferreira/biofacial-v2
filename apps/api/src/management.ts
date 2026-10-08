@@ -193,8 +193,8 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
     if (!actor) return reply.code(401).send({ error: 'unauthorized' });
     if (actor.mustChangePassword) return reply.code(403).send({ error: 'password_change_required' });
     const result = actor.role === 'gestor'
-      ? await db.query(`SELECT id, client_id AS "clientId", name, status, starts_at AS "startsAt", ends_at AS "endsAt", venue FROM events WHERE client_id = ANY($1::uuid[]) ORDER BY starts_at DESC LIMIT 500`, [actor.clientIds])
-      : await db.query(`SELECT id, client_id AS "clientId", name, status, starts_at AS "startsAt", ends_at AS "endsAt", venue FROM events ORDER BY starts_at DESC LIMIT 500`);
+      ? await db.query(`SELECT id, client_id AS "clientId", name, status, starts_at AS "startsAt", ends_at AS "endsAt", timezone, venue FROM events WHERE client_id = ANY($1::uuid[]) ORDER BY starts_at DESC LIMIT 500`, [actor.clientIds])
+      : await db.query(`SELECT id, client_id AS "clientId", name, status, starts_at AS "startsAt", ends_at AS "endsAt", timezone, venue FROM events ORDER BY starts_at DESC LIMIT 500`);
     return { items: result.rows };
   });
 

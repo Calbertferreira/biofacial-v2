@@ -142,12 +142,18 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     const eventId = eventIdSchema.safeParse((request.params as { eventId?: string }).eventId);
     const body = scanSchema.safeParse(request.body);
     if (!eventId.success || !body.success) return reply.code(400).send({ error: 'invalid_input' });
-    const event = await db.query(`SELECT client_id, status, starts_at, ends_at FROM events WHERE id = $1`, [eventId.data]);
+    const event = await db.query(`SELECT client_id, status, starts_at, ends_at, timezone FROM events WHERE id = $1`, [eventId.data]);
     if (!event.rowCount) return reply.code(404).send({ error: 'event_not_found' });
     if (actor && !canReadClient(actor, event.rows[0].client_id)) return reply.code(403).send({ error: 'forbidden_client' });
     const now = Date.now();
-    if (event.rows[0].status !== 'active' || now < new Date(event.rows[0].starts_at).getTime() || now > new Date(event.rows[0].ends_at).getTime()) {
+    if (event.rows[0].status !== 'active') {
       return reply.code(409).send({ error: 'event_not_active' });
+    }
+    if (now < new Date(event.rows[0].starts_at).getTime()) {
+      return reply.code(409).send({ error: 'event_not_started', startsAt: event.rows[0].starts_at, timezone: event.rows[0].timezone });
+    }
+    if (now > new Date(event.rows[0].ends_at).getTime()) {
+      return reply.code(409).send({ error: 'event_ended' });
     }
     let identification: z.infer<typeof identifyResponse>;
     try {
