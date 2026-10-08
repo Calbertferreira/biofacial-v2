@@ -68,14 +68,23 @@ def extract(image_base64: str) -> np.ndarray:
     if max(width, height) > 1600:
         scale = 1600 / max(width, height)
         image = cv2.resize(image, (round(width * scale), round(height * scale)))
+    detection_scale = min(1.0, 640 / max(image.shape[:2]))
+    detection_image = (cv2.resize(image, (round(image.shape[1] * detection_scale),
+                                          round(image.shape[0] * detection_scale)))
+                       if detection_scale < 1 else image)
     with model_lock:
-        detector.setInputSize((image.shape[1], image.shape[0]))
-        _, faces = detector.detect(image)
+        detector.setInputSize((detection_image.shape[1], detection_image.shape[0]))
+        _, faces = detector.detect(detection_image)
+        if (faces is None or len(faces) == 0) and detection_scale < 1:
+            detector.setInputSize((image.shape[1], image.shape[0]))
+            _, faces = detector.detect(image)
+            detection_scale = 1.0
         if faces is None or len(faces) == 0:
             raise HTTPException(422, "face_not_found")
         if len(faces) > 1:
             raise HTTPException(422, "multiple_faces")
-        face = faces[0]
+        face = faces[0].copy()
+        face[:14] /= detection_scale
         if min(face[2], face[3]) < 100:
             raise HTTPException(422, "face_too_small")
         aligned = recognizer.alignCrop(image, face)

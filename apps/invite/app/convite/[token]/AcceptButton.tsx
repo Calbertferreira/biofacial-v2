@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const messages: Record<string, string> = {
   face_capture_required: 'Tire uma foto para concluir o cadastro.',
@@ -27,22 +27,91 @@ async function prepareImage(file: File): Promise<string> {
 export default function AcceptButton({ token, initialStatus, hasFaceProfile }: { token: string; initialStatus: string; hasFaceProfile: boolean }) {
   const [status, setStatus] = useState(initialStatus);
   const [image, setImage] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
+
+  function stopCamera() {
+    cameraRequestRef.current += 1;
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOpen(false);
+    setCameraReady(false);
+  }
+
+  useEffect(() => () => {
+    cameraRequestRef.current += 1;
+    streamRef.current?.getTracks().forEach(track => track.stop());
+  }, []);
+
+  useEffect(() => {
+    if (!cameraOpen || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    void videoRef.current.play().catch(() => setError('Não foi possível iniciar a câmera frontal. Escolha uma foto do aparelho.'));
+  }, [cameraOpen]);
+
+  async function openFrontCamera() {
+    setError('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Este navegador não permite abrir a câmera frontal. Abra o link no Chrome ou escolha uma foto do aparelho.');
+      return;
+    }
+    setImage(null);
+    const requestId = ++cameraRequestRef.current;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { exact: 'user' } } });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      setCameraReady(false);
+      setCameraOpen(true);
+    } catch {
+      setError('Não foi possível abrir a câmera frontal. Permita o acesso, abra o link no Chrome ou escolha uma foto do aparelho.');
+    }
+  }
+
+  function captureFrontCamera() {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !video.videoHeight) {
+      setError('A câmera ainda não está pronta. Tente novamente.');
+      return;
+    }
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setError('Não foi possível capturar a foto.');
+      return;
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setImage(canvas.toDataURL('image/jpeg', 0.84).split(',')[1]);
+    setError('');
+    stopCamera();
+  }
   if (status === 'attended') return <div className="success" role="status"><h2>Presença registrada</h2><p>Sua entrada no evento foi registrada.</p></div>;
   if (status === 'accepted') return <div className="success" role="status"><h2>Presença confirmada</h2><p>Seu convite está aceito. Apresente seu rosto na entrada do evento.</p></div>;
   if (status !== 'registered' && status !== 'invited') return <p>Este convite não está disponível.</p>;
 
   return <section className="card">
     <h2>Confirme sua presença</h2>
-    <p>{hasFaceProfile ? 'Seu cadastro facial anterior será utilizado. Confirme para aceitar o convite.' : 'Tire uma foto nítida do seu rosto para aceitar o convite. Apenas você deve aparecer na imagem.'}</p>
-    {!hasFaceProfile && <label className="cameraButton">{image ? 'Trocar foto' : 'Abrir câmera'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={async event => {
+    <p>{hasFaceProfile ? 'Seu cadastro facial anterior será utilizado. Confirme para aceitar o convite.' : 'Use a câmera frontal e mantenha o telefone a uma distância em que seu rosto inteiro e os ombros apareçam. Apenas você deve estar na imagem.'}</p>
+    {!hasFaceProfile && <><div className="cameraControls"><button type="button" className="cameraButton" disabled={busy || cameraOpen} onClick={() => void openFrontCamera()}>Abrir câmera frontal</button><label className="cameraButton secondary">Escolher foto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={async event => {
       const file = event.target.files?.[0];
       if (!file) return;
-      try { setImage(await prepareImage(file)); setError(''); }
+      try { stopCamera(); setImage(await prepareImage(file)); setError(''); }
       catch { setError('Não foi possível abrir a foto.'); }
-    }} /></label>}
+      event.target.value = '';
+    }} /></label></div>{cameraOpen && <div className="cameraCapture"><video ref={videoRef} autoPlay playsInline muted onLoadedMetadata={() => setCameraReady(true)} /><div className="cameraControls"><button type="button" className="cameraButton" disabled={!cameraReady} onClick={captureFrontCamera}>Usar esta foto</button><button type="button" className="cameraButton secondary" onClick={stopCamera}>Cancelar</button></div></div>}</>}
     {image && !hasFaceProfile && <img className="preview" src={`data:image/jpeg;base64,${image}`} alt="Prévia da foto capturada" />}
     <label className="consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> Autorizo o uso da minha biometria facial para identificação neste evento. A foto é processada para gerar um modelo biométrico; a foto não é armazenada.</label>
     <button className="primary" disabled={busy || !consent || (!hasFaceProfile && !image)} onClick={async () => {
