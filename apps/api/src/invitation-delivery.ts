@@ -55,7 +55,7 @@ export function registerInvitationDelivery(app: FastifyInstance, db: pg.Pool, pu
       let invitationUrl = '';
       try {
         await client.query('BEGIN');
-        const selected = await client.query('SELECT id, name, email, phone_e164, invitation_status, send_attempts FROM guests WHERE id = $1 AND event_id = $2 FOR UPDATE', [guestId, eventId.data]);
+        const selected = await client.query('SELECT id, name, email, phone_e164, invitation_status, send_attempts FROM guests WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL FOR UPDATE', [guestId, eventId.data]);
         if (!selected.rowCount) { await client.query('ROLLBACK'); return reply.code(404).send({ error: 'guest_not_found', guestId }); }
         const guest = selected.rows[0];
         if (['declined', 'expired'].includes(guest.invitation_status)) { await client.query('ROLLBACK'); return reply.code(409).send({ error: 'invitation_unavailable', guestId }); }
@@ -79,7 +79,7 @@ export function registerInvitationDelivery(app: FastifyInstance, db: pg.Pool, pu
           try {
             const providerMessageId = await deliver(item.channel, item.destination, invitationUrl, event.rows[0].name, guest.name, item.id);
             await db.query("UPDATE invitation_deliveries SET status = 'sent', provider_message_id = $2, completed_at = now() WHERE id = $1", [item.id, providerMessageId]);
-            await db.query("UPDATE guests SET invitation_status = 'invited' WHERE id = $1 AND invitation_status = 'registered'", [guestId]);
+            await db.query("UPDATE guests SET invitation_status = 'invited' WHERE id = $1 AND deleted_at IS NULL AND invitation_status = 'registered'", [guestId]);
             results.push({ guestId, channel: item.channel, status: 'sent' });
           } catch (cause) {
             const error = cause instanceof Error ? cause.message : 'delivery_failed';

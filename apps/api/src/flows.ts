@@ -21,7 +21,7 @@ async function callFaceEngine(path: string, payload: unknown, config: Config): P
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10_000),
   });
-  if (response.status === 422 || response.status === 413) {
+  if (response.status === 422 || response.status === 413 || response.status === 409) {
     const problem = await response.json() as { detail?: string };
     throw new FaceImageError(problem.detail ?? 'invalid_image', response.status);
   }
@@ -71,30 +71,19 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     if (!token.success || !body.success) return reply.code(400).send({ error: 'invalid_input' });
     const hash = createHash('sha256').update(token.data).digest('hex');
     const guestResult = await db.query(
-      `SELECT g.id, g.event_id, g.face_profile_id, g.invitation_status, g.email, g.phone_e164,
-              e.client_id, e.status AS event_status
+      `SELECT g.id, g.event_id, g.invitation_status, e.status AS event_status,
+              p.id AS own_profile_id, (p.image_ciphertext IS NOT NULL) AS has_stored_image
        FROM guests g JOIN events e ON e.id = g.event_id
-       WHERE g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1)`, [hash],
+       LEFT JOIN face_profiles p ON p.guest_id = g.id AND p.event_id = g.event_id
+       WHERE g.deleted_at IS NULL AND (g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1))`, [hash],
     );
     if (!guestResult.rowCount) return reply.code(404).send({ error: 'invitation_not_found' });
     const guest = guestResult.rows[0];
     if (guest.event_status === 'finished' || guest.event_status === 'cancelled' || guest.invitation_status === 'declined') {
       return reply.code(409).send({ error: 'invitation_unavailable' });
     }
-    let profileId: string | null = guest.face_profile_id;
-    if (!profileId) {
-      const previous = await db.query(
-        `SELECT prior.face_profile_id FROM guests prior JOIN events pe ON pe.id = prior.event_id
-         WHERE prior.id <> $1 AND pe.client_id = $2 AND prior.face_profile_id IS NOT NULL
-           AND prior.invitation_status IN ('accepted', 'attended')
-           AND (($3::text IS NOT NULL AND lower(prior.email) = lower($3::text))
-             OR ($3::text IS NULL AND $4::text IS NOT NULL AND prior.phone_e164 = $4::text))
-         ORDER BY prior.accepted_at DESC LIMIT 1`,
-        [guest.id, guest.client_id, guest.email, guest.phone_e164],
-      );
-      profileId = previous.rows[0]?.face_profile_id ?? null;
-    }
-    if (!profileId) {
+    let profileId: string | null = guest.own_profile_id;
+    if (!guest.has_stored_image) {
       if (!body.data.imageBase64) return reply.code(422).send({ error: 'face_capture_required' });
       try {
         const response = await callFaceEngine('/v1/enroll', {
@@ -111,9 +100,9 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     try {
       await client.query('BEGIN');
       const updated = await client.query(
-        `UPDATE guests SET face_profile_id = COALESCE(face_profile_id, $2),
+        `UPDATE guests SET face_profile_id = $2,
                             invitation_status = 'accepted', accepted_at = COALESCE(accepted_at, now())
-         WHERE id = $1 AND invitation_status IN ('registered', 'invited', 'accepted') RETURNING id, event_id, invitation_status`,
+         WHERE id = $1 AND deleted_at IS NULL AND invitation_status IN ('registered', 'invited', 'accepted') RETURNING id, event_id, invitation_status`,
         [guest.id, profileId],
       );
       if (!updated.rowCount) {
@@ -179,7 +168,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
       }
       const guest = await client.query(
         `SELECT id, name, invitation_status, face_profile_id FROM guests
-         WHERE id = $1 AND event_id = $2 FOR UPDATE`, [identification.guestId, eventId.data],
+         WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL FOR UPDATE`, [identification.guestId, eventId.data],
       );
       if (!guest.rowCount || !['accepted', 'attended'].includes(guest.rows[0].invitation_status) || !guest.rows[0].face_profile_id) {
         await client.query(
@@ -257,7 +246,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     reply.header('Cache-Control', 'no-store');
     if (identification.status !== 'match') return { matched: false, reason: identification.status };
     const guest = await db.query(
-      `SELECT id, name FROM guests WHERE id = $1 AND event_id = $2 AND invitation_status IN ('accepted', 'attended') AND face_profile_id IS NOT NULL`,
+      `SELECT id, name FROM guests WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL AND invitation_status IN ('accepted', 'attended') AND face_profile_id IS NOT NULL`,
       [identification.guestId, eventId.data],
     );
     if (!guest.rowCount) return { matched: false, reason: 'not_invited' };

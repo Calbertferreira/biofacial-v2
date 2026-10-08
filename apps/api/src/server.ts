@@ -153,7 +153,7 @@ app.post('/v1/events/:eventId/guests/:guestId/invitation-link', async (request, 
   const result = await db.query(
     `SELECT e.client_id, e.status AS "eventStatus", g.invitation_status AS "invitationStatus"
        FROM guests g JOIN events e ON e.id = g.event_id
-      WHERE g.id = $1 AND g.event_id = $2`, [guestId.data, eventId.data],
+      WHERE g.id = $1 AND g.event_id = $2 AND g.deleted_at IS NULL`, [guestId.data, eventId.data],
   );
   if (!result.rowCount || !canWriteClient(actor, result.rows[0].client_id)) {
     return reply.code(404).send({ error: 'guest_not_found' });
@@ -187,7 +187,7 @@ app.patch('/v1/events/:eventId/guests/:guestId', async (request, reply) => {
       `UPDATE guests SET name = COALESCE($3, name),
          email = CASE WHEN $4::boolean THEN $5 ELSE email END,
          phone_e164 = CASE WHEN $6::boolean THEN $7 ELSE phone_e164 END
-       WHERE id = $1 AND event_id = $2
+       WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL
        RETURNING id, name, email, phone_e164 AS "phoneE164", invitation_status AS "invitationStatus"`,
       [guestId.data, eventId.data, value.name ?? null, Object.hasOwn(value, 'email'), value.email ?? null, Object.hasOwn(value, 'phoneE164'), value.phoneE164 ?? null],
     );
@@ -206,17 +206,12 @@ app.get('/v1/invitations/:token', async (request, reply) => {
   const hash = createHash('sha256').update(token.data).digest('hex');
   const result = await db.query(
     `SELECT g.name AS "guestName", g.invitation_status AS "invitationStatus",
-            (g.face_profile_id IS NOT NULL OR EXISTS (
-              SELECT 1 FROM guests prior JOIN events pe ON pe.id = prior.event_id
-              WHERE prior.id <> g.id AND pe.client_id = e.client_id AND prior.face_profile_id IS NOT NULL
-                AND prior.invitation_status IN ('accepted', 'attended')
-                AND ((g.email IS NOT NULL AND lower(prior.email) = lower(g.email))
-                  OR (g.email IS NULL AND g.phone_e164 IS NOT NULL AND prior.phone_e164 = g.phone_e164))
-            )) AS "hasFaceProfile",
+            (p.image_ciphertext IS NOT NULL) AS "hasStoredImage",
             e.name AS "eventName", e.starts_at AS "startsAt", e.ends_at AS "endsAt",
             e.timezone, e.venue
        FROM guests g JOIN events e ON e.id = g.event_id
-      WHERE g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1)`,
+       LEFT JOIN face_profiles p ON p.guest_id = g.id AND p.event_id = g.event_id
+      WHERE g.deleted_at IS NULL AND (g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1))`,
     [hash],
   );
   if (!result.rowCount) return reply.code(404).send({ error: 'invitation_not_found' });

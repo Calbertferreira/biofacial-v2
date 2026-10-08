@@ -103,6 +103,29 @@ try {
   const invitation = await call(base, `/v1/invitations/${token}`);
   if (invitation.invitationStatus !== 'accepted') throw new Error('Convite não foi atualizado');
 
+  const otherEvent = await call(base, '/v1/events', {
+    method: 'POST', key: process.env.ADMIN_API_KEY, expected: 201,
+    body: { name: `E2E Outro evento ${new Date(now).toISOString()}`,
+      startsAt: new Date(now - 5 * 60_000).toISOString(), endsAt: new Date(now + 15 * 60_000).toISOString(),
+      timezone: 'America/Sao_Paulo', venue: 'Ambiente de testes' },
+  });
+  const otherGuest = await call(base, `/v1/events/${otherEvent.id}/guests`, {
+    method: 'POST', key: process.env.ADMIN_API_KEY, expected: 201,
+    body: { name: 'Convidado E2E', email: `e2e-${now}@example.invalid` },
+  });
+  const otherToken = new URL(otherGuest.invitationUrl).pathname.split('/').at(-1);
+  const otherInvitation = await call(base, `/v1/invitations/${otherToken}`);
+  if (otherInvitation.hasStoredImage) throw new Error('Selfie de outro evento foi reutilizada');
+  await call(base, `/v1/invitations/${otherToken}/accept`, {
+    method: 'POST', body: { consent: true }, expected: 422,
+  });
+  await call(base, `/v1/events/${otherEvent.id}/guests/${otherGuest.id}`, {
+    method: 'DELETE', key: process.env.ADMIN_API_KEY,
+  });
+  await call(base, `/v1/invitations/${otherToken}`, { expected: 404 });
+  const otherList = await call(base, `/v1/events/${otherEvent.id}/guests`, { key: process.env.ADMIN_API_KEY });
+  if (otherList.items.some(item => item.id === otherGuest.id)) throw new Error('Convidado excluído permaneceu na lista');
+
   await call(base, `/v1/events/${event.id}/activate`, { method: 'POST', key: process.env.ADMIN_API_KEY });
   await call(base, `/v1/events/${event.id}/scan`, {
     method: 'POST', body: { imageBase64: unknownImage }, expected: 401,

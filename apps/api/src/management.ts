@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { z } from 'zod';
-import { actorFor, canReadClient, hashPassword } from './security.js';
+import { actorFor, canReadClient, canWriteClient, hashPassword } from './security.js';
 
 const uuid = z.uuid();
 const clientSchema = z.object({ name: z.string().trim().min(2).max(160), externalId: z.string().trim().min(1).max(120).optional() });
@@ -224,8 +224,42 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
                 'channel', d.channel, 'status', d.status, 'createdAt', d.created_at,
                 'providerMessageId', d.provider_message_id, 'error', d.error_message)
                 ORDER BY d.created_at DESC) FROM invitation_deliveries d WHERE d.guest_id = g.id), '[]'::json) AS deliveries
-       FROM guests g WHERE g.event_id = $1 ORDER BY g.created_at DESC LIMIT 500`, [id.data],
+       FROM guests g WHERE g.event_id = $1 AND g.deleted_at IS NULL ORDER BY g.created_at DESC LIMIT 500`, [id.data],
     );
     return { items: result.rows };
+  });
+
+  app.delete('/v1/events/:eventId/guests/:guestId', async (request, reply) => {
+    const actor = await actorFor(request, db);
+    if (!actor) return reply.code(401).send({ error: 'unauthorized' });
+    if (actor.mustChangePassword) return reply.code(403).send({ error: 'password_change_required' });
+    if (actor.role === 'staff') return reply.code(403).send({ error: 'forbidden' });
+    const params = request.params as { eventId?: string; guestId?: string };
+    const eventId = uuid.safeParse(params.eventId);
+    const guestId = uuid.safeParse(params.guestId);
+    if (!eventId.success || !guestId.success) return reply.code(400).send({ error: 'invalid_input' });
+    const event = await db.query('SELECT client_id FROM events WHERE id = $1', [eventId.data]);
+    if (!event.rowCount || !canWriteClient(actor, event.rows[0].client_id)) return reply.code(404).send({ error: 'event_not_found' });
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const removed = await client.query(
+        `UPDATE guests SET deleted_at = now(), face_profile_id = NULL
+         WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL RETURNING id`,
+        [guestId.data, eventId.data],
+      );
+      if (!removed.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.code(404).send({ error: 'guest_not_found' });
+      }
+      await client.query('DELETE FROM face_profiles WHERE guest_id = $1 AND event_id = $2', [guestId.data, eventId.data]);
+      await client.query('DELETE FROM invitation_tokens WHERE guest_id = $1', [guestId.data]);
+      await client.query(`INSERT INTO audit_events (event_id, guest_id, action) VALUES ($1, $2, 'guest_removed')`, [eventId.data, guestId.data]);
+      await client.query('COMMIT');
+      return { status: 'removed', guestId: guestId.data };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
   });
 }

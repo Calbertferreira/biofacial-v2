@@ -11,7 +11,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   const allowed = ['clients', 'users', 'events'].includes(route)
     || /^clients\/[a-f0-9-]{36}$/.test(route)
     || /^users\/[a-f0-9-]{36}$/.test(route)
-    || /^events\/[a-f0-9-]{36}(\/guests|\/guests\/[a-f0-9-]{36}\/invitation-link|\/access-events|\/activate|\/finish|\/invitations\/send)?$/.test(route);
+    || /^events\/[a-f0-9-]{36}(\/guests|\/guests\/[a-f0-9-]{36}(\/invitation-link)?|\/access-events|\/activate|\/finish|\/invitations\/send)?$/.test(route);
   if (!allowed) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   const base = process.env.API_INTERNAL_URL ?? 'http://localhost:3001';
   const body = request.method === 'GET' ? '' : await request.text();
@@ -26,3 +26,4 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
 export const GET = handler;
 export const POST = handler;
 export const PATCH = handler;
+export const DELETE = handler;

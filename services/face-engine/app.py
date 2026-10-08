@@ -1,4 +1,4 @@
-"""Isolated face-template service. Images are processed in memory and never persisted."""
+"""Event-scoped facial enrollment and identification service."""
 import base64
 import hmac
 import os
@@ -54,7 +54,7 @@ def authorize(authorization: str | None):
         raise HTTPException(401, "unauthorized")
 
 
-def extract(image_base64: str) -> np.ndarray:
+def extract(image_base64: str) -> tuple[np.ndarray, np.ndarray]:
     try:
         data = base64.b64decode(image_base64, validate=True)
     except ValueError as exc:
@@ -90,7 +90,7 @@ def extract(image_base64: str) -> np.ndarray:
         aligned = recognizer.alignCrop(image, face)
         feature = recognizer.feature(aligned).flatten().astype(np.float32)
     feature /= np.linalg.norm(feature)
-    return feature
+    return feature, image
 
 
 @app.get("/health")
@@ -103,33 +103,41 @@ def health():
 @app.post("/v1/enroll")
 def enroll(payload: EnrollRequest, authorization: str | None = Header(default=None)):
     authorize(authorization)
-    feature = extract(payload.imageBase64)
+    feature, image = extract(payload.imageBase64)
+    encoded, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not encoded:
+        raise HTTPException(422, "invalid_image")
+    encrypted_image = CIPHER.encrypt(jpeg.tobytes())
+    encrypted_feature = CIPHER.encrypt(feature.tobytes())
     with connection() as conn:
-        row = conn.execute("SELECT id, face_profile_id FROM guests WHERE id = %s AND event_id = %s", (payload.guestId, payload.eventId)).fetchone()
+        row = conn.execute("SELECT id FROM guests WHERE id = %s AND event_id = %s AND deleted_at IS NULL", (payload.guestId, payload.eventId)).fetchone()
         if not row:
             raise HTTPException(404, "guest_not_found")
-        if row[1]:
-            return {"profileId": row[1]}
-        existing = conn.execute("SELECT id FROM face_profiles WHERE guest_id = %s", (payload.guestId,)).fetchone()
-        if existing:
-            return {"profileId": str(existing[0])}
-        encrypted = CIPHER.encrypt(feature.tobytes())
-        profile_id = conn.execute(
-            "INSERT INTO face_profiles (guest_id, embedding_ciphertext, model) VALUES (%s, %s, %s) RETURNING id",
-            (payload.guestId, encrypted, MODEL),
-        ).fetchone()[0]
+        stored = conn.execute(
+            """INSERT INTO face_profiles (guest_id, event_id, embedding_ciphertext, image_ciphertext, model)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT (guest_id) DO UPDATE SET embedding_ciphertext = EXCLUDED.embedding_ciphertext,
+                 image_ciphertext = EXCLUDED.image_ciphertext, model = EXCLUDED.model
+               WHERE face_profiles.event_id = EXCLUDED.event_id
+               RETURNING id""",
+            (payload.guestId, payload.eventId, encrypted_feature, encrypted_image, MODEL),
+        ).fetchone()
+        if not stored:
+            raise HTTPException(409, "face_profile_event_mismatch")
+        profile_id = stored[0]
     return {"profileId": str(profile_id)}
 
 
 @app.post("/v1/identify")
 def identify(payload: FaceRequest, authorization: str | None = Header(default=None)):
     authorize(authorization)
-    query = extract(payload.imageBase64)
+    query, _ = extract(payload.imageBase64)
     with connection() as conn:
         rows = conn.execute(
             """SELECT g.id, p.embedding_ciphertext FROM guests g
-                 JOIN face_profiles p ON p.id::text = g.face_profile_id
-                WHERE g.event_id = %s AND g.invitation_status IN ('accepted', 'attended') AND p.model = %s""",
+                 JOIN face_profiles p ON p.id::text = g.face_profile_id AND p.guest_id = g.id AND p.event_id = g.event_id
+                WHERE g.event_id = %s AND g.deleted_at IS NULL AND g.invitation_status IN ('accepted', 'attended')
+                  AND p.image_ciphertext IS NOT NULL AND p.model = %s""",
             (payload.eventId, MODEL),
         ).fetchall()
     scores = []
