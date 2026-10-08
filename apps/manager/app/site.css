@@ -39,6 +39,7 @@ body > main, body > #__next > main { max-width: 920px; margin: 40px auto; paddin
 .adminCopyright { margin-top: 70px; color: #aaa39b; font-size: 12px; text-align: center; }
 .adminError, .adminSuccess { padding: 12px 16px; margin: 18px 0; border-radius: 8px; background: #fff1ec; color: #973b18; font-size: 13px; }
 .adminSuccess { background: #ebf7ed; color: #17682f; }
+.adminContent > .adminError, .adminContent > .adminSuccess, .eventDetail > .adminError, .eventDetail > .adminSuccess { position: sticky; top: 10px; z-index: 20; box-shadow: 0 8px 24px #29211c24; }
 .adminLoading { min-height: 100vh; display: grid; place-content: center; text-align: center; color: #835033; }
 .adminLoadingIcon { margin: auto; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 16px; color: #fff; background: #af480c; font-size: 36px; font-weight: 800; }
 
