@@ -38,3 +38,11 @@ h1, h2, h3 { font-weight: 750; letter-spacing: -.04em; line-height: 1.16; text-w
 .panel > label { display: grid; gap: 10px; color: #3b3026; font-size: 14px; font-weight: 700; }
 .panel > label select { min-height: 52px; border-width: 1.5px; border-radius: 10px; }
 @media (max-width: 650px) { .panel form { grid-template-columns: 1fr; } .panel form button { justify-self: stretch; width: 100%; } }
+
+/* Fonte e escala consistentes com o painel. */
+body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.55; letter-spacing: normal; }
+h1, h2, h3 { font-family: inherit; font-weight: 700; letter-spacing: normal; line-height: 1.25; }
+h1 { font-size: clamp(34px, 5vw, 46px); }
+header small { font-size: 13px; font-weight: 700; letter-spacing: .05em; }
+.panel form label, .panel > label { font-size: 15px; }
+.panel form input, .panel > label select, .panel button { font-family: inherit; font-size: 16px; letter-spacing: normal; }

@@ -222,3 +222,21 @@ button, input, select, textarea { font-family: inherit; }
 .guestTable .deliveryTable th, .guestTable .deliveryTable td { padding: 9px 11px; border-bottom: 1px solid #eee6d7; font-size: 12px; font-weight: 500; line-height: 1.4; vertical-align: top; }
 .guestTable .deliveryTable thead th { background: #f7eedb; color: #4b3826; font-weight: 750; white-space: nowrap; }
 @media (max-width: 650px) { .adminTableWrap, .guestTableWrap { margin-right: -8px; } .adminTable thead th, .guestTable thead th { padding: 12px; } .adminTable tbody th, .adminTable tbody td, .guestTable tbody > tr > th, .guestTable tbody > tr > td { padding: 13px 12px; } }
+
+/* Tipografia legível em computadores e celulares. */
+body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.55; letter-spacing: normal; }
+h1, h2, h3, h4 { font-family: inherit; font-weight: 700; letter-spacing: normal; line-height: 1.25; }
+button, input, select, textarea { font-family: inherit; letter-spacing: normal; }
+.adminAuthVisual h1 { font-size: clamp(38px, 5vw, 58px); line-height: 1.15; letter-spacing: normal; }
+.adminAuthCard h2, .adminIntro h1, .adminHero h2, .adminSectionTitle h2, .adminStats strong, .formHeading strong { letter-spacing: normal; }
+.adminEyebrow, .adminSidebarProduct, .adminSidebarLabel, .adminHero span { font-size: 12px; font-weight: 700; letter-spacing: .05em; }
+.adminSidebar nav a, .adminSidebarTip strong, .adminSidebarTip p, .adminSidebarUser strong, .adminSidebarUser small { font-size: 14px; }
+.adminTopbar, .adminTopbar button, .adminRole, .adminIntro p, .adminIntro time, .adminHero p, .adminHero a, .adminStats small, .adminStats span, .adminSectionTitle p { font-size: 14px; }
+.adminAuthCard > p, .adminAuthCard form + small, .adminAuthCard > small, .adminCopyright { color: #5a5147; font-size: 14px; }
+.adminAuthCard label, .adminPasswordGroup > label, .adminDashboard form > label, .eventDetail form > label, .demoPage label { font-size: 15px; }
+.formHeading span, .adminDashboard legend, .adminError, .adminSuccess, .eventDetail p { font-size: 14px; }
+.adminDashboard form input:not([type=checkbox]), .adminDashboard form select, .eventDetail form input, .adminAuthCard input, .demoPage input { font-size: 16px; font-weight: 400; }
+.adminTable thead th, .guestTable thead th, .guestTable .deliveryTable thead th { font-size: 14px; font-weight: 700; letter-spacing: normal; text-transform: none; }
+.adminTable tbody th, .adminTable tbody td, .guestTable tbody > tr > th, .guestTable tbody > tr > td { font-size: 15px; }
+.tableCode, .tableStatus, .guestTable .deliveryTable th, .guestTable .deliveryTable td { font-size: 13px !important; }
+.eventManualLink input { font-size: 15px; }
