@@ -103,7 +103,7 @@ export default function AcceptButton({ token, initialStatus, hasStoredImage }: {
   }
   if (status === 'attended') return <div className="success" role="status"><h2>Presença registrada</h2><p>Sua entrada no evento foi registrada.</p></div>;
   if (status === 'accepted' && storedImage) return <div className="success" role="status"><h2>Presença confirmada</h2><p>Seu convite está aceito. Sua selfie está salva para este evento. Apresente seu rosto na entrada.</p></div>;
-  if (status !== 'registered' && status !== 'invited' && status !== 'accepted') return <p>Este convite não está disponível.</p>;
+  if (status !== 'registered' && status !== 'invited' && status !== 'accepted') return <p role="alert" className="error">Este convite não está disponível.</p>;
 
   return <section className="card">
     <h2>{status === 'accepted' ? 'Atualize sua selfie para este evento' : 'Confirme sua presença'}</h2>

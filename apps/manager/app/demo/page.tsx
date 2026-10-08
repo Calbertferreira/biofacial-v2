@@ -25,7 +25,7 @@ export default function ManagerHome() {
     finally { setBusy(false); }
   }
 
-  return <main>
+  return <main className="demoPage">
     <h1>BioFacial Manager</h1>
     <p>Fluxo de demonstração com banco de desenvolvimento e identidade facial simulada.</p>
     <section><h2>1. Criar evento</h2>
@@ -40,10 +40,10 @@ export default function ManagerHome() {
           endsAt: endsAt.toISOString(),
         }); setEvent(created); setGuest(null); setHistory([]); setMessage('Evento de demonstração criado com sucesso.');
       }); }}>
-        <label>Nome <input name="name" required minLength={3} defaultValue="Evento teste no navegador" /></label><br />
-        <label>Local <input name="venue" required defaultValue="Ambiente de testes" /></label><br />
-        <label>Início <input name="startsAt" type="datetime-local" required /></label><br />
-        <label>Fim <input name="endsAt" type="datetime-local" required /></label><br />
+        <label>Nome <input name="name" required minLength={3} defaultValue="Evento teste no navegador" /></label>
+        <label>Local <input name="venue" required defaultValue="Ambiente de testes" /></label>
+        <label>Início <input name="startsAt" type="datetime-local" required /></label>
+        <label>Fim <input name="endsAt" type="datetime-local" required /></label>
         <button disabled={busy}>Criar evento</button>
       </form>
     </section>
@@ -52,8 +52,8 @@ export default function ManagerHome() {
         setGuest(await send(`/api/events/${event.id}/guests`, 'POST', { name: data.get('name'), email: data.get('email') }));
         setMessage('Convite gerado com sucesso. Abra o link exibido abaixo.');
       }); }}>
-        <label>Nome <input name="name" required minLength={2} defaultValue="Convidado de teste" /></label><br />
-        <label>Email de teste <input name="email" type="email" required placeholder="convidado@example.invalid" /></label><br />
+        <label>Nome <input name="name" required minLength={2} defaultValue="Convidado de teste" /></label>
+        <label>Email de teste <input name="email" type="email" required placeholder="convidado@example.invalid" /></label>
         <button disabled={busy}>Gerar convite</button>
       </form>
       {guest && <p>Link exclusivo: <a href={guest.invitationUrl} target="_blank" rel="noreferrer">Abrir convite de {guest.name}</a></p>}
@@ -68,7 +68,7 @@ export default function ManagerHome() {
       })}>Atualizar histórico de acesso</button>
       <ol>{history.map(item => <li key={`${item.createdAt}-${item.action}`}>{item.action === 'entry' ? 'Entrada' : item.action === 'exit' ? 'Saída' : 'Acesso negado'} — {item.guestName ?? (item.action === 'denied' ? accessReasonMessage(item.reason) : 'Convidado')} — {new Date(item.createdAt).toLocaleString('pt-BR')}</li>)}</ol>
     </section>}
-    {error && <p role="alert" style={{ color: 'darkred' }}>{error}</p>}
-    {message && <p role="status" style={{ color: 'darkgreen' }}>{message}</p>}
+    {error && <p role="alert" className="adminError">{error}</p>}
+    {message && <p role="status" className="adminSuccess">{message}</p>}
   </main>;
 }

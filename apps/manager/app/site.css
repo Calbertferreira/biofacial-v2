@@ -105,3 +105,64 @@ body > main, body > #__next > main { max-width: 920px; margin: 40px auto; paddin
 .eventDetail{max-width:960px;margin:30px auto;padding:0 24px}.eventDetail>a{color:#a94710}.eventDetail header{margin:20px 0;padding:35px;border-radius:16px;background:#29211c;color:white}.eventDetail h1{margin:7px 0;font-size:clamp(32px,5vw,46px)}.eventDetail section{margin:18px 0;padding:25px;border:1px solid #eae2da;border-radius:14px;background:white}.eventDetail section h2{margin-top:0}.eventDetail form{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.eventDetail label{display:grid;gap:7px;font-weight:700}.eventDetail input{min-height:44px;padding:10px;border:1px solid #d9d0c8;border-radius:8px}.eventDetail button{min-height:44px;padding:10px 16px;border:0;border-radius:8px;background:#a94710;color:white;font-weight:700;cursor:pointer}.eventDetail button:disabled{opacity:.5}.eventDetail ul{padding-left:18px}.eventDetail li{padding:8px 0;border-bottom:1px solid #eee8e3}.eventInvite{display:grid;gap:10px;margin:20px 0;padding:16px;border-radius:10px;background:#f3eee9}.eventInvite a,.eventActions a{color:#a94710}@media(max-width:650px){.eventDetail form{grid-template-columns:1fr}}
 .guestTableWrap{overflow-x:auto;margin:12px 0 16px}.guestTable{width:100%;border-collapse:collapse;text-align:left;font-size:14px}.guestTable th,.guestTable td{padding:12px 9px;border-bottom:1px solid #eee8e3;vertical-align:top}.guestTable th{color:#6e6258}.guestTable input[type=checkbox],.eventSendPanel input[type=checkbox]{min-height:auto;width:18px;height:18px;accent-color:#a94710}.guestTable details{margin-top:5px}.guestTable summary{cursor:pointer;color:#a94710}.guestTable ul{margin:5px 0;padding-left:16px}.eventSendPanel{display:grid;gap:12px;margin-top:16px;padding:18px;border:1px solid #e4d6ca;border-radius:10px;background:#faf6f2}.eventSendPanel h4,.eventSendPanel p{margin:0}.eventSendPanel label{display:flex;align-items:center;gap:8px;font-weight:500}.eventSendPanel>div{display:flex;flex-wrap:wrap;gap:10px}.eventDetail button.secondary{background:#eee7e0;color:#3c3027}
 .eventManualLink{display:grid;gap:7px;min-width:260px;margin-top:10px}.eventManualLink label{font-weight:600}.eventManualLink input{width:100%;font-size:13px}.eventManualLink small{color:#5d5046}
+
+/* Paleta e espaçamento compartilhados pelas telas do Manager. */
+:root { --page-yellow: #fff9e8; --card-yellow: #fffdf3; --soft-border: #eadfbf; --brand-brown: #9b3f0c; }
+body, .adminDashboard, .adminAuth, .adminAuthRight { background: var(--page-yellow); }
+.adminTopbar { background: #fffdf5f2; border-bottom-color: var(--soft-border); }
+.adminHero { box-shadow: 0 14px 32px #56320e22; }
+.adminStats a, .adminDashboard section form, .adminDashboard section > ul, .eventDetail section { background: var(--card-yellow); border-color: var(--soft-border); box-shadow: 0 8px 24px #533b1410; }
+.adminDashboard section form { gap: 22px 24px; padding: clamp(22px, 3vw, 32px); }
+.adminDashboard section > ul li { border-bottom-color: #eee4c9; }
+.adminDashboard section > ul li:hover { background: #fff5d9; }
+.adminContent { padding-bottom: 100px; }
+.adminDashboard section { margin-bottom: 62px; }
+.adminSectionTitle { margin-bottom: 24px; }
+.adminAuthCard { padding: 26px; border: 1px solid var(--soft-border); border-radius: 18px; background: var(--card-yellow); box-shadow: 0 20px 50px #5d41121a; }
+.adminAuthCard > p { margin-bottom: 28px; }
+.adminPrimary, .adminDashboard form button, .eventDetail button { transition: background .18s ease, box-shadow .18s ease, transform .18s ease; }
+.adminPrimary:focus-visible, .adminDashboard button:focus-visible, .eventDetail button:focus-visible, .adminTopbar button:focus-visible { outline: 3px solid #e89d36; outline-offset: 3px; }
+.adminDashboard form button:disabled, .adminPrimary:disabled, .eventDetail button:disabled { cursor: not-allowed; transform: none; }
+.adminError, .adminSuccess { padding: 15px 18px; border: 1px solid; border-left-width: 5px; border-radius: 11px; font-size: 14px; font-weight: 600; line-height: 1.5; }
+.adminError { color: #8d2020; background: #fff0ef; border-color: #e9aaa6; }
+.adminSuccess { color: #176239; background: #edf9ef; border-color: #a6d6b0; }
+.adminDashboard input:not([type=checkbox]), .adminDashboard select, .eventDetail input { border-color: #d8cba9; }
+
+.eventDetail { max-width: 1120px; margin: 42px auto 72px; }
+.eventDetail > a { display: inline-flex; margin-bottom: 10px; font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.eventDetail header { margin: 16px 0 26px; padding: clamp(28px, 4vw, 44px); background: linear-gradient(115deg, #34251d, #71370f); box-shadow: 0 14px 30px #4a2b1224; }
+.eventDetail header p { line-height: 1.55; color: #f8eadb; }
+.eventDetail section { margin: 24px 0; padding: clamp(22px, 3vw, 34px); border-radius: 18px; }
+.eventDetail section h2 { margin: 0 0 18px; font-size: clamp(23px, 3vw, 30px); }
+.eventDetail section h3 { margin: 34px 0 16px; }
+.eventDetail form { gap: 20px 24px; margin: 18px 0 26px; }
+.eventDetail label { gap: 9px; }
+.eventDetail input { background: #fff; }
+.eventDetail form button { align-self: end; }
+.eventDetail section > button { margin: 10px 12px 10px 0; }
+.eventDetail button:hover:not(:disabled) { background: #7d330a; box-shadow: 0 7px 16px #71370f26; transform: translateY(-1px); }
+.eventDetail button.secondary:hover:not(:disabled) { background: #e8d9b7; }
+.eventActions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.eventActions h2, .eventActions p { flex-basis: 100%; }
+.eventActions p { margin: 12px 0 0; }
+.guestTableWrap { margin: 18px 0 22px; border: 1px solid var(--soft-border); border-radius: 12px; background: #fff; }
+.guestTable { min-width: 850px; }
+.guestTable th, .guestTable td { padding: 17px 14px; border-bottom-color: #eee6d4; line-height: 1.45; }
+.guestTable th { background: #fff5db; color: #5c4938; font-size: 12px; letter-spacing: .02em; }
+.guestTable tbody tr:hover { background: #fffaf0; }
+.guestTable td button { min-width: 104px; }
+.guestTable td:last-child button { background: #fff0ef; color: #9a2525; border: 1px solid #edc0bc; }
+.guestTable td:last-child button:hover:not(:disabled) { background: #fbe1de; }
+.eventSendPanel { gap: 16px; padding: 24px; background: #fff6dc; border-color: #e6d6a8; }
+.eventSendPanel > div { gap: 12px; padding-top: 4px; }
+.eventManualLink { min-width: 220px; margin-top: 14px; }
+.eventManualLink small[role=status] { padding: 8px 10px; border: 1px solid #a9d9b3; border-radius: 7px; background: #edf9ef; color: #176239; font-weight: 700; }
+.eventDetail p { line-height: 1.6; }
+
+.demoPage { max-width: 900px; }
+.demoPage section { margin: 24px 0; padding: 26px; border: 1px solid var(--soft-border); border-radius: 16px; background: var(--card-yellow); }
+.demoPage form { display: grid; gap: 14px; max-width: 520px; }
+.demoPage label { display: grid; gap: 8px; }
+.demoPage input { min-height: 45px; padding: 10px 12px; border: 1px solid #d8cba9; border-radius: 8px; }
+.demoPage button { min-height: 44px; width: fit-content; margin: 8px 12px 8px 0; padding: 10px 16px; border: 0; border-radius: 8px; background: var(--brand-brown); color: white; font-weight: 700; cursor: pointer; }
+@media (max-width: 650px) { .eventDetail { margin: 22px auto 54px; padding: 0 16px; } .eventDetail form { grid-template-columns: 1fr; } .eventDetail section > button { width: 100%; margin: 8px 0; } .eventActions button { width: 100%; } .adminAuthCard { padding: 22px; } }
