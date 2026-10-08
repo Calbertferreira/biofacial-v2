@@ -141,6 +141,34 @@ app.post('/v1/events/:eventId/guests', async (request, reply) => {
   }
 });
 
+app.post('/v1/events/:eventId/guests/:guestId/invitation-link', async (request, reply) => {
+  const actor = await actorFor(request, db);
+  if (!actor) return reply.code(401).send({ error: 'unauthorized' });
+  if (actor.mustChangePassword || actor.role === 'staff') return reply.code(403).send({ error: 'forbidden' });
+  if (!publicBaseUrl) return reply.code(503).send({ error: 'invitation_app_unavailable' });
+  const params = request.params as { eventId?: string; guestId?: string };
+  const eventId = eventIdSchema.safeParse(params.eventId);
+  const guestId = eventIdSchema.safeParse(params.guestId);
+  if (!eventId.success || !guestId.success) return reply.code(400).send({ error: 'invalid_input' });
+  const result = await db.query(
+    `SELECT e.client_id, e.status AS "eventStatus", g.invitation_status AS "invitationStatus"
+       FROM guests g JOIN events e ON e.id = g.event_id
+      WHERE g.id = $1 AND g.event_id = $2`, [guestId.data, eventId.data],
+  );
+  if (!result.rowCount || !canWriteClient(actor, result.rows[0].client_id)) {
+    return reply.code(404).send({ error: 'guest_not_found' });
+  }
+  if (['finished', 'cancelled'].includes(result.rows[0].eventStatus)
+    || ['declined', 'expired'].includes(result.rows[0].invitationStatus)) {
+    return reply.code(409).send({ error: 'invitation_unavailable' });
+  }
+  const token = randomBytes(32).toString('hex');
+  const hash = createHash('sha256').update(token).digest('hex');
+  await db.query('INSERT INTO invitation_tokens (token_hash, guest_id) VALUES ($1, $2)', [hash, guestId.data]);
+  reply.header('Cache-Control', 'no-store');
+  return reply.code(201).send({ invitationUrl: new URL(`/convite/${token}`, publicBaseUrl).toString() });
+});
+
 app.patch('/v1/events/:eventId/guests/:guestId', async (request, reply) => {
   const actor = await actorFor(request, db);
   if (!actor) return reply.code(401).send({ error: 'unauthorized' });
