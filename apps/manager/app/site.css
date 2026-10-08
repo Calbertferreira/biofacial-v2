@@ -166,3 +166,32 @@ body, .adminDashboard, .adminAuth, .adminAuthRight { background: var(--page-yell
 .demoPage input { min-height: 45px; padding: 10px 12px; border: 1px solid #d8cba9; border-radius: 8px; }
 .demoPage button { min-height: 44px; width: fit-content; margin: 8px 12px 8px 0; padding: 10px 16px; border: 0; border-radius: 8px; background: var(--brand-brown); color: white; font-weight: 700; cursor: pointer; }
 @media (max-width: 650px) { .eventDetail { margin: 22px auto 54px; padding: 0 16px; } .eventDetail form { grid-template-columns: 1fr; } .eventDetail section > button { width: 100%; margin: 8px 0; } .eventActions button { width: 100%; } .adminAuthCard { padding: 22px; } }
+
+/* Hierarquia tipográfica e identificação dos formulários. */
+body { font-family: "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 15px; line-height: 1.55; letter-spacing: .005em; }
+h1, h2, h3, h4 { font-weight: 750; letter-spacing: -.035em; line-height: 1.18; text-wrap: balance; }
+button, input, select, textarea { font-family: inherit; }
+.adminIntro h1, .adminAuthVisual h1, .adminAuthCard h2 { letter-spacing: -.045em; }
+.adminDashboard .formHeading, .eventDetail .formHeading { grid-column: 1 / -1; display: grid; gap: 3px; margin-bottom: 2px; padding: 0 0 17px; border-bottom: 1px solid #e9ddbd; }
+.formHeading strong { color: #34291f; font-size: 19px; font-weight: 750; letter-spacing: -.025em; }
+.formHeading span { color: #776b5b; font-size: 13px; line-height: 1.5; }
+.adminDashboard section form, .eventDetail form { column-gap: 26px; row-gap: 23px; }
+.adminDashboard form > label, .eventDetail form > label { min-width: 0; color: #3b3026; font-size: 14px; font-weight: 700; letter-spacing: .01em; }
+.adminDashboard form > label.fieldFull { grid-column: 1 / -1; }
+.eventDetail form > label.fieldFull { grid-column: 1 / -1; }
+.eventDetail form > label.fieldFull input { max-width: 520px; }
+.adminDashboard form button.formSubmit, .eventDetail form button.formSubmit { grid-column: 1 / -1; justify-self: end; min-width: 195px; margin-top: 6px; }
+.adminDashboard form input:not([type=checkbox]), .adminDashboard form select, .eventDetail form input, .adminAuthCard input { min-height: 50px; border: 1.5px solid #d4c6a6; border-radius: 10px; font-size: 15px; font-weight: 450; letter-spacing: 0; }
+.adminDashboard form input:not([type=checkbox]):focus, .adminDashboard form select:focus, .eventDetail form input:focus, .adminAuthCard input:focus { border-color: #9f571d; outline: none; box-shadow: 0 0 0 4px #d9943b29; }
+.adminDashboard form input::placeholder, .eventDetail form input::placeholder, .adminAuthCard input::placeholder { color: #827c72; }
+.adminDashboard fieldset { gap: 10px; padding: 19px; background: #fff9e9; border-color: #e2d4b3; }
+.adminDashboard legend { padding: 0 8px; color: #4e3a27; font-size: 13px; }
+.adminDashboard fieldset label { padding: 9px 12px; border: 1px solid #e7dcc4; border-radius: 8px; background: #fffefa; }
+.eventDetail form { padding: 22px; border: 1px solid #eee1c2; border-radius: 14px; background: #fffaf0; }
+.guestTable th { font-weight: 750; }
+.guestTable td { font-size: 13px; }
+.demoPage form { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; row-gap: 19px; }
+.demoPage form button { grid-column: 1 / -1; justify-self: end; min-width: 180px; margin-top: 12px; }
+.demoPage label { color: #3b3026; font-size: 14px; font-weight: 700; }
+.demoPage input { width: 100%; min-height: 50px; border-width: 1.5px; font-size: 15px; }
+@media (max-width: 650px) { .adminDashboard form button.formSubmit, .eventDetail form button.formSubmit, .demoPage form button { justify-self: stretch; width: 100%; } .demoPage form { grid-template-columns: 1fr; } .eventDetail form { padding: 18px; } .eventDetail form > label.fieldFull input { max-width: none; } }

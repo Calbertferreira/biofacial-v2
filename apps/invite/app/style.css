@@ -28,3 +28,15 @@ header p { line-height: 1.6; }
 .success p { margin-bottom: 0; }
 .error, .card > p[role=alert] { padding: 16px 18px; border: 1px solid #edb6b1; border-left: 5px solid #bb3830; border-radius: 11px; background: #fff0ef; color: #922722 !important; font-weight: 600; }
 @media (max-width: 550px) { main { padding: 16px 14px 48px; } .details { gap: 12px; } .cameraControls > button { flex: 1 1 180px; } }
+
+body { font-family: "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 16px; line-height: 1.6; letter-spacing: .005em; }
+h1, h2, h3 { font-weight: 750; letter-spacing: -.04em; line-height: 1.16; text-wrap: balance; }
+.eyebrow, .details small { font-weight: 750; letter-spacing: .1em; }
+.details > div { display: grid; align-content: start; gap: 5px; min-height: 112px; }
+.details strong { margin-top: 0; color: #352a20; font-size: 17px; font-weight: 700; letter-spacing: -.015em; }
+.details > div + div { border-left-width: 4px; border-left-color: #d9a257; }
+.card > h2 { padding-bottom: 18px; border-bottom: 1px solid #eadfbd; }
+.card > p { max-width: 62ch; font-size: 15px; }
+.cameraButton, .primary { font-family: inherit; font-size: 15px; font-weight: 700; }
+.consent { font-size: 15px; }
+@media (max-width: 550px) { .details > div { min-height: 0; } .details > div + div { border-left-width: 1px; } }

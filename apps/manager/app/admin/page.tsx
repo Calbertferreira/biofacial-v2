@@ -134,9 +134,10 @@ export default function AdminPage() {
         setMessage('Cliente cadastrado com sucesso.'); formElement.reset();
         try { await loadLists(); } catch { setError('Cliente cadastrado, mas a lista não foi atualizada. Clique em Atualizar.'); }
       }); }}>
-        <label>Nome <input name="name" required minLength={2} maxLength={160} /></label>{' '}
-        <label>ID externo <input name="externalId" maxLength={120} /></label>{' '}
-        <button disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar cliente'}</button>
+        <div className="formHeading"><strong>Dados do cliente</strong><span>Identifique a organização responsável pelos eventos.</span></div>
+        <label>Nome do cliente <input name="name" required minLength={2} maxLength={160} /></label>{' '}
+        <label>ID externo (opcional) <input name="externalId" maxLength={120} /></label>{' '}
+        <button className="formSubmit" disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar cliente'}</button>
       </form>}
       <ul>{clients.map(client => <li key={client.id}>{client.name} · {client.id} {!client.active && '(inativo)'}</li>)}</ul>
     </section>
@@ -153,16 +154,17 @@ export default function AdminPage() {
         formElement.reset();
         try { await loadLists(); } catch { setError('Usuário cadastrado, mas a lista não foi atualizada. Clique em Atualizar.'); }
       }); }}>
-        <label>Nome <input name="name" required minLength={2} maxLength={160} /></label>{' '}
-        <label>Email <input name="email" type="email" required /></label>{' '}
-        <label>Perfil <select value={newRole} onChange={event => setNewRole(event.target.value as typeof newRole)}>
+        <div className="formHeading"><strong>Dados de acesso</strong><span>Defina o perfil e os clientes permitidos para esta pessoa.</span></div>
+        <label>Nome do usuário <input name="name" required minLength={2} maxLength={160} /></label>{' '}
+        <label>E-mail de acesso <input name="email" type="email" required /></label>{' '}
+        <label>Perfil de acesso <select value={newRole} onChange={event => setNewRole(event.target.value as typeof newRole)}>
           {user.role === 'adm' && <><option value="adm">adm</option><option value="staff">staff</option></>}
           <option value="gestor">gestor</option>
         </select></label>{' '}
         <PasswordField label="Senha temporária" name="temporaryPassword" minLength={12} maxLength={128} autoComplete="new-password" />
         {newRole === 'gestor' && <fieldset><legend>Clientes permitidos</legend>{clients.filter(c => c.active).map(client =>
           <label key={client.id}><input type="checkbox" name="clientIds" value={client.id} /> {client.name} </label>)}</fieldset>}
-        <button disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar usuário'}</button>
+        <button className="formSubmit" disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar usuário'}</button>
       </form>}
       <ul>{users.map(item => <li key={item.id}>{item.name} · {item.email} · {item.role}{item.clientIds?.length ? ` · ${item.clientIds.map(id => clients.find(c => c.id === id)?.name ?? id).join(', ')}` : ''} {!item.active && '(inativo)'}</li>)}</ul>
     </section>
@@ -181,12 +183,13 @@ export default function AdminPage() {
         setMessage('Evento cadastrado com sucesso.'); formElement.reset();
         try { await loadLists(); } catch { setError('Evento cadastrado, mas a lista não foi atualizada. Clique em Atualizar.'); }
       }); }}>
-        <label>Cliente <select name="clientId" required><option value="">Selecione</option>{clients.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>{' '}
-        <label>Evento <input name="name" required minLength={3} maxLength={160} /></label>{' '}
-        <label>Local <input name="venue" required maxLength={240} /></label>
-        <label>Início <input name="startsAt" type="datetime-local" required /></label>{' '}
-        <label>Fim <input name="endsAt" type="datetime-local" required /></label>{' '}
-        <button disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar evento'}</button>
+        <div className="formHeading"><strong>Informações do evento</strong><span>Preencha os dados principais e confira o período antes de cadastrar.</span></div>
+        <label>Cliente responsável <select name="clientId" required><option value="">Selecione</option>{clients.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>{' '}
+        <label>Nome do evento <input name="name" required minLength={3} maxLength={160} /></label>{' '}
+        <label className="fieldFull">Local do evento <input name="venue" required maxLength={240} /></label>
+        <label>Data e hora de início <input name="startsAt" type="datetime-local" required /></label>{' '}
+        <label>Data e hora de término <input name="endsAt" type="datetime-local" required /></label>{' '}
+        <button className="formSubmit" disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar evento'}</button>
       </form>}
       <ul>{events.map(item => <li key={item.id}><a href={`/admin/events/${item.id}`}>{item.name} →</a> · {clients.find(c => c.id === item.clientId)?.name ?? 'sem cliente'} · {eventStatusLabel[item.status] ?? 'Situação desconhecida'}</li>)}</ul>
     </section>
