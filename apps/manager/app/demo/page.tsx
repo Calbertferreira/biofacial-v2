@@ -66,7 +66,7 @@ export default function ManagerHome() {
         const data = await send(`/api/events/${event.id}/access-events`); setHistory(data.items);
         setMessage('Histórico de acesso atualizado.');
       })}>Atualizar histórico de acesso</button>
-      <ol>{history.map(item => <li key={`${item.createdAt}-${item.action}`}>{item.action === 'entry' ? 'Entrada' : item.action === 'exit' ? 'Saída' : 'Acesso negado'} — {item.guestName ?? (item.action === 'denied' ? accessReasonMessage(item.reason) : 'Convidado')} — {new Date(item.createdAt).toLocaleString('pt-BR')}</li>)}</ol>
+      <div className="adminTableWrap"><table className="adminTable"><caption>Histórico de acesso da demonstração</caption><thead><tr><th scope="col">Data e hora</th><th scope="col">Resultado</th><th scope="col">Convidado ou motivo</th></tr></thead><tbody>{history.length ? history.map(item => <tr key={`${item.createdAt}-${item.action}`}><td>{new Date(item.createdAt).toLocaleString('pt-BR')}</td><td><span className={`tableStatus ${item.action === 'denied' ? 'isInactive' : 'isActive'}`}>{item.action === 'entry' ? 'Entrada' : item.action === 'exit' ? 'Saída' : 'Acesso negado'}</span></td><td>{item.guestName ?? (item.action === 'denied' ? accessReasonMessage(item.reason) : 'Convidado')}</td></tr>) : <tr><td colSpan={3} className="tableEmpty">Nenhum acesso registrado até agora.</td></tr>}</tbody></table></div>
     </section>}
     {error && <p role="alert" className="adminError">{error}</p>}
     {message && <p role="status" className="adminSuccess">{message}</p>}

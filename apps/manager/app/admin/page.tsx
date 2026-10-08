@@ -139,7 +139,7 @@ export default function AdminPage() {
         <label>ID externo (opcional) <input name="externalId" maxLength={120} /></label>{' '}
         <button className="formSubmit" disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar cliente'}</button>
       </form>}
-      <ul>{clients.map(client => <li key={client.id}>{client.name} · {client.id} {!client.active && '(inativo)'}</li>)}</ul>
+      <div className="adminTableWrap"><table className="adminTable"><caption>Clientes cadastrados</caption><thead><tr><th scope="col">Cliente</th><th scope="col">ID do cliente</th><th scope="col">ID externo</th><th scope="col">Situação</th></tr></thead><tbody>{clients.length ? clients.map(client => <tr key={client.id}><th scope="row">{client.name}</th><td className="tableCode">{client.id}</td><td>{client.externalId || 'Não informado'}</td><td><span className={`tableStatus ${client.active ? 'isActive' : 'isInactive'}`}>{client.active ? 'Ativo' : 'Inativo'}</span></td></tr>) : <tr><td colSpan={4} className="tableEmpty">Nenhum cliente cadastrado.</td></tr>}</tbody></table></div>
     </section>
 
     <section id="usuarios"><div className="adminSectionTitle"><span className="adminEyebrow">ACESSO E PERMISSÕES</span><h2>Usuários da aplicação</h2><p>Gerencie quem pode acessar o painel e seus clientes.</p></div>
@@ -166,7 +166,7 @@ export default function AdminPage() {
           <label key={client.id}><input type="checkbox" name="clientIds" value={client.id} /> {client.name} </label>)}</fieldset>}
         <button className="formSubmit" disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar usuário'}</button>
       </form>}
-      <ul>{users.map(item => <li key={item.id}>{item.name} · {item.email} · {item.role}{item.clientIds?.length ? ` · ${item.clientIds.map(id => clients.find(c => c.id === id)?.name ?? id).join(', ')}` : ''} {!item.active && '(inativo)'}</li>)}</ul>
+      <div className="adminTableWrap"><table className="adminTable"><caption>Usuários da aplicação</caption><thead><tr><th scope="col">Usuário</th><th scope="col">E-mail</th><th scope="col">Perfil de acesso</th><th scope="col">Clientes permitidos</th><th scope="col">Situação</th></tr></thead><tbody>{users.length ? users.map(item => <tr key={item.id}><th scope="row">{item.name}</th><td>{item.email}</td><td>{item.role === 'adm' ? 'Administrador' : item.role === 'staff' ? 'Equipe' : 'Gestor'}</td><td>{item.role === 'gestor' ? (item.clientIds?.length ? item.clientIds.map(id => clients.find(c => c.id === id)?.name ?? id).join(', ') : 'Nenhum') : 'Todos'}</td><td><span className={`tableStatus ${item.active === false ? 'isInactive' : 'isActive'}`}>{item.active === false ? 'Inativo' : 'Ativo'}</span></td></tr>) : <tr><td colSpan={5} className="tableEmpty">Nenhum usuário cadastrado.</td></tr>}</tbody></table></div>
     </section>
 
     <section id="eventos"><div className="adminSectionTitle"><span className="adminEyebrow">PROGRAMAÇÃO</span><h2>Eventos</h2><p>Organize os próximos encontros e acompanhe sua operação.</p></div>
@@ -191,7 +191,7 @@ export default function AdminPage() {
         <label>Data e hora de término <input name="endsAt" type="datetime-local" required /></label>{' '}
         <button className="formSubmit" disabled={busy}>{busy ? 'Cadastrando...' : 'Cadastrar evento'}</button>
       </form>}
-      <ul>{events.map(item => <li key={item.id}><a href={`/admin/events/${item.id}`}>{item.name} →</a> · {clients.find(c => c.id === item.clientId)?.name ?? 'sem cliente'} · {eventStatusLabel[item.status] ?? 'Situação desconhecida'}</li>)}</ul>
+      <div className="adminTableWrap"><table className="adminTable"><caption>Eventos cadastrados</caption><thead><tr><th scope="col">Evento</th><th scope="col">Cliente responsável</th><th scope="col">Início</th><th scope="col">Situação</th></tr></thead><tbody>{events.length ? events.map(item => <tr key={item.id}><th scope="row"><a href={`/admin/events/${item.id}`}>{item.name} →</a></th><td>{clients.find(c => c.id === item.clientId)?.name ?? 'Sem cliente'}</td><td>{new Date(item.startsAt).toLocaleString('pt-BR')}</td><td><span className={`tableStatus ${item.status === 'active' ? 'isActive' : 'isNeutral'}`}>{eventStatusLabel[item.status] ?? 'Situação desconhecida'}</span></td></tr>) : <tr><td colSpan={4} className="tableEmpty">Nenhum evento cadastrado.</td></tr>}</tbody></table></div>
     </section>
     </div></div>
   </main>;

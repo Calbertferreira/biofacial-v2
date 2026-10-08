@@ -195,3 +195,30 @@ button, input, select, textarea { font-family: inherit; }
 .demoPage label { color: #3b3026; font-size: 14px; font-weight: 700; }
 .demoPage input { width: 100%; min-height: 50px; border-width: 1.5px; font-size: 15px; }
 @media (max-width: 650px) { .adminDashboard form button.formSubmit, .eventDetail form button.formSubmit, .demoPage form button { justify-self: stretch; width: 100%; } .demoPage form { grid-template-columns: 1fr; } .eventDetail form { padding: 18px; } .eventDetail form > label.fieldFull input { max-width: none; } }
+
+/* Listagens com colunas identificadas e leitura consistente. */
+.adminTableWrap, .guestTableWrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--soft-border); border-radius: 13px; background: #fffefa; }
+.adminTableWrap { margin-top: 18px; }
+.adminTable, .guestTable, .deliveryTable { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; }
+.adminTable { min-width: 720px; }
+.adminTable caption, .guestTable caption, .deliveryTable caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.adminTable thead th, .guestTable thead th { padding: 15px 17px; border-bottom: 1px solid #e5d7b7; background: #fff2d2; color: #4b3826; font-size: 12px; font-weight: 800; letter-spacing: .035em; text-transform: uppercase; white-space: nowrap; }
+.adminTable tbody th, .adminTable tbody td, .guestTable tbody > tr > th, .guestTable tbody > tr > td { padding: 17px; border-bottom: 1px solid #ede4d1; color: #43382d; font-size: 14px; line-height: 1.5; vertical-align: top; overflow-wrap: anywhere; }
+.adminTable tbody th, .guestTable tbody > tr > th { color: #302821; font-weight: 700; }
+.adminTable tbody tr:last-child > *, .guestTable tbody > tr:last-child > * { border-bottom: 0; }
+.adminTable tbody tr:hover, .guestTable tbody > tr:hover { background: #fff9e9; }
+.adminTable a { color: #8e390b; font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.tableCode { color: #6e6255 !important; font-size: 12px !important; font-family: ui-monospace, Consolas, monospace; }
+.tableStatus { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.3; white-space: nowrap; }
+.tableStatus.isActive { background: #e5f5e9; color: #176239; }
+.tableStatus.isInactive { background: #ffebe9; color: #922722; }
+.tableStatus.isNeutral { background: #f4ead6; color: #6b491c; }
+.adminTable .tableEmpty, .guestTable .tableEmpty { padding: 24px; color: #71675b; font-size: 14px; text-align: center; }
+.guestTable { min-width: 1050px; }
+.guestTable details { min-width: 110px; }
+.guestTable summary { font-weight: 700; white-space: nowrap; }
+.deliveryTableWrap { max-width: 530px; max-height: 280px; overflow: auto; margin-top: 12px; border: 1px solid #e8dcc5; border-radius: 9px; background: white; }
+.deliveryTable { min-width: 500px; }
+.guestTable .deliveryTable th, .guestTable .deliveryTable td { padding: 9px 11px; border-bottom: 1px solid #eee6d7; font-size: 12px; font-weight: 500; line-height: 1.4; vertical-align: top; }
+.guestTable .deliveryTable thead th { background: #f7eedb; color: #4b3826; font-weight: 750; white-space: nowrap; }
+@media (max-width: 650px) { .adminTableWrap, .guestTableWrap { margin-right: -8px; } .adminTable thead th, .guestTable thead th { padding: 12px; } .adminTable tbody th, .adminTable tbody td, .guestTable tbody > tr > th, .guestTable tbody > tr > td { padding: 13px 12px; } }
