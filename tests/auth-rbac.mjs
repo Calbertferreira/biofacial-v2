@@ -4,8 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 import { once } from 'node:events';
+import { createRequire } from 'node:module';
 
 const root = resolve('.');
+const pg = createRequire(resolve('apps/api/package.json'))('pg');
+const mockDb = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const bootstrap = await readFile(resolve('.bootstrap-admin.txt'), 'utf8');
 const adminEmail = bootstrap.match(/^Email: (.+)$/m)?.[1];
 const adminPassword = bootstrap.match(/^Senha temporária: (.+)$/m)?.[1];
@@ -21,9 +24,10 @@ const faceServer = createServer(async (request, response) => {
   for await (const chunk of request) raw += chunk;
   const body = JSON.parse(raw);
   response.setHeader('content-type', 'application/json');
-  if (request.url === '/v1/enroll') {
+  if (request.url === '/v1/verify-or-enroll') {
     enrolled = { guestId: body.guestId, eventId: body.eventId, imageBase64: body.imageBase64 };
-    return response.end(JSON.stringify({ profileId: `rbac-test-${body.guestId}` }));
+    await mockDb.query("INSERT INTO person_face_profiles (id, embedding_ciphertext, image_ciphertext, model) VALUES ($1, decode('00', 'hex'), decode('00', 'hex'), 'test-model')", [body.guestId]);
+    return response.end(JSON.stringify({ profileId: body.guestId, result: 'enrolled' }));
   }
   if (request.url === '/v1/identify') {
     return response.end(JSON.stringify(enrolled && body.eventId === enrolled.eventId && body.imageBase64 === enrolled.imageBase64
@@ -151,4 +155,5 @@ try {
   apiProcess?.kill();
   realApiProcess?.kill();
   faceServer.close();
+  await mockDb.end();
 }

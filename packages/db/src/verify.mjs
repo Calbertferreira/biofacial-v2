@@ -3,7 +3,7 @@ import pg from 'pg';
 const connectionString = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 if (!connectionString) throw new Error('Conexão de banco não configurada');
 const client = new pg.Client({ connectionString });
-const expected = ['access_events', 'app_users', 'audit_events', 'clients', 'events', 'guests', 'schema_migrations', 'user_clients', 'user_sessions'];
+const expected = ['access_events', 'app_users', 'audit_events', 'clients', 'events', 'guests', 'person_face_contacts', 'person_face_profiles', 'schema_migrations', 'user_clients', 'user_sessions'];
 await client.connect();
 try {
   const result = await client.query(

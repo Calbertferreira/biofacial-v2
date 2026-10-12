@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 
 if (!process.env.DATABASE_URL || !process.env.ADMIN_API_KEY || !process.env.SCANNER_API_KEY || !process.env.FACE_ENGINE_TOKEN) {
   throw new Error('Configure DATABASE_URL, ADMIN_API_KEY, SCANNER_API_KEY e FACE_ENGINE_TOKEN no .env');
@@ -9,8 +10,9 @@ if (!process.env.DATABASE_URL || !process.env.ADMIN_API_KEY || !process.env.SCAN
 
 const faceImage = Buffer.from('fixture-face-convidado-e2e').toString('base64');
 const unknownImage = Buffer.from('fixture-face-desconhecido').toString('base64');
-let enrolledGuestId;
-let enrolledEventId;
+const enrolledByEvent = new Map();
+const pg = createRequire(resolve('apps/api/package.json'))('pg');
+const mockDb = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
 const faceServer = createServer(async (request, response) => {
   if (request.headers.authorization !== `Bearer ${process.env.FACE_ENGINE_TOKEN}`) {
@@ -21,13 +23,23 @@ const faceServer = createServer(async (request, response) => {
   for await (const chunk of request) raw += chunk;
   const body = JSON.parse(raw);
   response.setHeader('content-type', 'application/json');
-  if (request.url === '/v1/enroll' && body.imageBase64 === faceImage) {
-    enrolledGuestId = body.guestId;
-    enrolledEventId = body.eventId;
-    response.end(JSON.stringify({ profileId: `test-${enrolledGuestId}` }));
+  if (request.url === '/v1/verify-or-enroll') {
+    const guest = await mockDb.query('SELECT email, phone_e164 FROM guests WHERE id = $1 AND event_id = $2', [body.guestId, body.eventId]);
+    const existing = await mockDb.query("SELECT profile_id FROM person_face_contacts WHERE kind = 'email' AND value = lower($1) LIMIT 1", [guest.rows[0].email]);
+    if (existing.rowCount && body.imageBase64 !== faceImage) {
+      response.writeHead(409).end(JSON.stringify({ detail: 'face_mismatch' }));
+      return;
+    }
+    const profileId = existing.rows[0]?.profile_id ?? body.guestId;
+    if (!existing.rowCount) {
+      await mockDb.query("INSERT INTO person_face_profiles (id, embedding_ciphertext, image_ciphertext, model) VALUES ($1, decode('00', 'hex'), decode('00', 'hex'), 'test-model')", [profileId]);
+      await mockDb.query("INSERT INTO person_face_contacts (kind, value, profile_id) VALUES ('email', lower($1), $2)", [guest.rows[0].email, profileId]);
+    }
+    enrolledByEvent.set(body.eventId, body.guestId);
+    response.end(JSON.stringify({ profileId, result: existing.rowCount ? 'matched' : 'enrolled' }));
   } else if (request.url === '/v1/identify') {
-    response.end(JSON.stringify(body.imageBase64 === faceImage && body.eventId === enrolledEventId && enrolledGuestId
-      ? { status: 'match', guestId: enrolledGuestId, confidence: 0.99 }
+    response.end(JSON.stringify(body.imageBase64 === faceImage && enrolledByEvent.has(body.eventId)
+      ? { status: 'match', guestId: enrolledByEvent.get(body.eventId), confidence: 0.99 }
       : { status: 'no_match' }));
   } else {
     response.writeHead(422).end(JSON.stringify({ error: 'invalid_capture' }));
@@ -115,16 +127,36 @@ try {
   });
   const otherToken = new URL(otherGuest.invitationUrl).pathname.split('/').at(-1);
   const otherInvitation = await call(base, `/v1/invitations/${otherToken}`);
-  if (otherInvitation.hasStoredImage) throw new Error('Selfie de outro evento foi reutilizada');
+  if (otherInvitation.hasStoredImage) throw new Error('Convite novo foi aceito antes da comparação facial');
   await call(base, `/v1/invitations/${otherToken}/accept`, {
     method: 'POST', body: { consent: true }, expected: 422,
   });
+  await call(base, `/v1/invitations/${otherToken}/accept`, {
+    method: 'POST', body: { consent: true, imageBase64: unknownImage }, expected: 409,
+  });
+  const otherPending = await call(base, `/v1/invitations/${otherToken}`);
+  if (otherPending.invitationStatus !== 'registered') throw new Error('Selfie incompatível aceitou o convite');
+  await call(base, `/v1/invitations/${otherToken}/accept`, {
+    method: 'POST', body: { consent: true, imageBase64: faceImage },
+  });
+  const otherAccepted = await call(base, `/v1/invitations/${otherToken}`);
+  if (otherAccepted.invitationStatus !== 'accepted' || !otherAccepted.hasStoredImage) throw new Error('Convite do segundo evento não foi verificado');
+  const profiles = await mockDb.query(
+    'SELECT count(DISTINCT person_face_id)::int AS total FROM guests WHERE id = ANY($1::uuid[])',
+    [[guest.id, otherGuest.id]],
+  );
+  if (profiles.rows[0].total !== 1) throw new Error('Mais de uma foto foi vinculada ao mesmo contato');
   await call(base, `/v1/events/${otherEvent.id}/guests/${otherGuest.id}`, {
     method: 'DELETE', key: process.env.ADMIN_API_KEY,
   });
   await call(base, `/v1/invitations/${otherToken}`, { expected: 404 });
   const otherList = await call(base, `/v1/events/${otherEvent.id}/guests`, { key: process.env.ADMIN_API_KEY });
   if (otherList.items.some(item => item.id === otherGuest.id)) throw new Error('Convidado excluído permaneceu na lista');
+  await call(base, `/v1/events/${otherEvent.id}/activate`, { method: 'POST', key: process.env.ADMIN_API_KEY });
+  const deletedGuestScan = await call(base, `/v1/events/${otherEvent.id}/scan`, {
+    method: 'POST', key: process.env.SCANNER_API_KEY, body: { imageBase64: faceImage },
+  });
+  if (deletedGuestScan.action !== 'denied') throw new Error('Convidado excluído entrou no outro evento');
 
   await call(base, `/v1/events/${event.id}/activate`, { method: 'POST', key: process.env.ADMIN_API_KEY });
   await call(base, `/v1/events/${event.id}/scan`, {
@@ -150,4 +182,5 @@ try {
 } finally {
   api?.kill();
   faceServer.close();
+  await mockDb.end();
 }

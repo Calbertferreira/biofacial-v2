@@ -244,7 +244,7 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
     try {
       await client.query('BEGIN');
       const removed = await client.query(
-        `UPDATE guests SET deleted_at = now(), face_profile_id = NULL
+        `UPDATE guests SET deleted_at = now(), person_face_id = NULL
          WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL RETURNING id`,
         [guestId.data, eventId.data],
       );
@@ -252,7 +252,6 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
         await client.query('ROLLBACK');
         return reply.code(404).send({ error: 'guest_not_found' });
       }
-      await client.query('DELETE FROM face_profiles WHERE guest_id = $1 AND event_id = $2', [guestId.data, eventId.data]);
       await client.query('DELETE FROM invitation_tokens WHERE guest_id = $1', [guestId.data]);
       await client.query(`INSERT INTO audit_events (event_id, guest_id, action) VALUES ($1, $2, 'guest_removed')`, [eventId.data, guestId.data]);
       await client.query('COMMIT');

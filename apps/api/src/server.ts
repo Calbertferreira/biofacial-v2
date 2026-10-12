@@ -186,7 +186,14 @@ app.patch('/v1/events/:eventId/guests/:guestId', async (request, reply) => {
     const result = await db.query(
       `UPDATE guests SET name = COALESCE($3, name),
          email = CASE WHEN $4::boolean THEN $5 ELSE email END,
-         phone_e164 = CASE WHEN $6::boolean THEN $7 ELSE phone_e164 END
+         phone_e164 = CASE WHEN $6::boolean THEN $7 ELSE phone_e164 END,
+         invitation_status = CASE
+           WHEN (($4::boolean AND email IS DISTINCT FROM $5) OR ($6::boolean AND phone_e164 IS DISTINCT FROM $7))
+             AND invitation_status IN ('accepted', 'attended') THEN 'invited'
+           ELSE invitation_status END,
+         accepted_at = CASE
+           WHEN (($4::boolean AND email IS DISTINCT FROM $5) OR ($6::boolean AND phone_e164 IS DISTINCT FROM $7))
+             THEN NULL ELSE accepted_at END
        WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL
        RETURNING id, name, email, phone_e164 AS "phoneE164", invitation_status AS "invitationStatus"`,
       [guestId.data, eventId.data, value.name ?? null, Object.hasOwn(value, 'email'), value.email ?? null, Object.hasOwn(value, 'phoneE164'), value.phoneE164 ?? null],
@@ -210,7 +217,7 @@ app.get('/v1/invitations/:token', async (request, reply) => {
             e.name AS "eventName", e.starts_at AS "startsAt", e.ends_at AS "endsAt",
             e.timezone, e.venue
        FROM guests g JOIN events e ON e.id = g.event_id
-       LEFT JOIN face_profiles p ON p.guest_id = g.id AND p.event_id = g.event_id
+       LEFT JOIN person_face_profiles p ON p.id = g.person_face_id
       WHERE g.deleted_at IS NULL AND (g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1))`,
     [hash],
   );

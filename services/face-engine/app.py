@@ -1,4 +1,4 @@
-"""Event-scoped facial enrollment and identification service."""
+"""Shared facial profile with event-scoped invitation and access checks."""
 import base64
 import hmac
 import os
@@ -100,32 +100,73 @@ def health():
     return {"status": "ok", "model": MODEL}
 
 
-@app.post("/v1/enroll")
-def enroll(payload: EnrollRequest, authorization: str | None = Header(default=None)):
+@app.post("/v1/enroll")  # Compatibilidade durante a atualização da API.
+@app.post("/v1/verify-or-enroll")
+def verify_or_enroll(payload: EnrollRequest, authorization: str | None = Header(default=None)):
     authorize(authorization)
     feature, image = extract(payload.imageBase64)
-    encoded, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    if not encoded:
-        raise HTTPException(422, "invalid_image")
-    encrypted_image = CIPHER.encrypt(jpeg.tobytes())
-    encrypted_feature = CIPHER.encrypt(feature.tobytes())
     with connection() as conn:
-        row = conn.execute("SELECT id FROM guests WHERE id = %s AND event_id = %s AND deleted_at IS NULL", (payload.guestId, payload.eventId)).fetchone()
-        if not row:
-            raise HTTPException(404, "guest_not_found")
-        stored = conn.execute(
-            """INSERT INTO face_profiles (guest_id, event_id, embedding_ciphertext, image_ciphertext, model)
-               VALUES (%s, %s, %s, %s, %s)
-               ON CONFLICT (guest_id) DO UPDATE SET embedding_ciphertext = EXCLUDED.embedding_ciphertext,
-                 image_ciphertext = EXCLUDED.image_ciphertext, model = EXCLUDED.model
-               WHERE face_profiles.event_id = EXCLUDED.event_id
-               RETURNING id""",
-            (payload.guestId, payload.eventId, encrypted_feature, encrypted_image, MODEL),
-        ).fetchone()
-        if not stored:
-            raise HTTPException(409, "face_profile_event_mismatch")
-        profile_id = stored[0]
-    return {"profileId": str(profile_id)}
+        with conn.transaction():
+            # Serializa a criação/associação de contatos, inclusive em convites simultâneos.
+            conn.execute("SELECT pg_advisory_xact_lock(hashtext('biofacial_face_enrollment'))")
+            guest = conn.execute(
+                """SELECT email, phone_e164, person_face_id FROM guests
+                    WHERE id = %s AND event_id = %s AND deleted_at IS NULL FOR UPDATE""",
+                (payload.guestId, payload.eventId),
+            ).fetchone()
+            if not guest:
+                raise HTTPException(404, "guest_not_found")
+            email, phone, current_profile_id = guest
+            matches = conn.execute(
+                """SELECT DISTINCT profile_id FROM person_face_contacts
+                    WHERE (kind = 'email' AND value = lower(%s))
+                       OR (kind = 'phone' AND value = %s)""",
+                (email, phone),
+            ).fetchall()
+            profile_ids = {row[0] for row in matches}
+            if current_profile_id:
+                profile_ids.add(current_profile_id)
+            if len(profile_ids) > 1:
+                raise HTTPException(409, "identity_conflict")
+            profile_id = next(iter(profile_ids), None)
+            if profile_id:
+                stored = conn.execute(
+                    "SELECT embedding_ciphertext, model FROM person_face_profiles WHERE id = %s FOR UPDATE",
+                    (profile_id,),
+                ).fetchone()
+                if not stored or stored[1] != MODEL:
+                    raise HTTPException(409, "face_model_mismatch")
+                template = np.frombuffer(CIPHER.decrypt(bytes(stored[0])), dtype=np.float32)
+                if float(np.dot(feature, template)) < 0.55:
+                    raise HTTPException(409, "face_mismatch")
+                result = "matched"
+            else:
+                encoded, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if not encoded:
+                    raise HTTPException(422, "invalid_image")
+                profile_id = conn.execute(
+                    """INSERT INTO person_face_profiles (embedding_ciphertext, image_ciphertext, model)
+                       VALUES (%s, %s, %s) RETURNING id""",
+                    (CIPHER.encrypt(feature.tobytes()), CIPHER.encrypt(jpeg.tobytes()), MODEL),
+                ).fetchone()[0]
+                result = "enrolled"
+            duplicate = conn.execute(
+                """SELECT 1 FROM guests WHERE event_id = %s AND id <> %s
+                   AND person_face_id = %s AND deleted_at IS NULL
+                   AND invitation_status IN ('accepted', 'attended') LIMIT 1""",
+                (payload.eventId, payload.guestId, profile_id),
+            ).fetchone()
+            if duplicate:
+                raise HTTPException(409, "face_already_registered_for_event")
+            for kind, value in (("email", email.lower() if email else None), ("phone", phone)):
+                if value:
+                    conn.execute(
+                        """INSERT INTO person_face_contacts (kind, value, profile_id)
+                           VALUES (%s, %s, %s) ON CONFLICT (kind, value) DO NOTHING""",
+                        (kind, value, profile_id),
+                    )
+            conn.execute("UPDATE guests SET person_face_id = %s WHERE id = %s", (profile_id, payload.guestId))
+    return {"profileId": str(profile_id), "result": result}
 
 
 @app.post("/v1/identify")
@@ -135,7 +176,7 @@ def identify(payload: FaceRequest, authorization: str | None = Header(default=No
     with connection() as conn:
         rows = conn.execute(
             """SELECT g.id, p.embedding_ciphertext FROM guests g
-                 JOIN face_profiles p ON p.id::text = g.face_profile_id AND p.guest_id = g.id AND p.event_id = g.event_id
+                 JOIN person_face_profiles p ON p.id = g.person_face_id
                 WHERE g.event_id = %s AND g.deleted_at IS NULL AND g.invitation_status IN ('accepted', 'attended')
                   AND p.image_ciphertext IS NOT NULL AND p.model = %s""",
             (payload.eventId, MODEL),
