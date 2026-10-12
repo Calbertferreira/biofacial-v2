@@ -8,7 +8,7 @@ import { actorFor, canReadClient, canWriteClient, matchesKey } from './security.
 type Config = { scannerKey?: string; faceEngineUrl?: string; faceEngineToken?: string };
 const enrollResponse = z.object({ profileId: z.uuid(), result: z.enum(['enrolled', 'matched']) });
 const identifyResponse = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('match'), guestId: z.uuid(), confidence: z.number().min(0).max(1) }),
+  z.object({ status: z.literal('match'), profileId: z.uuid(), confidence: z.number().min(0).max(1) }),
   z.object({ status: z.literal('no_match') }),
   z.object({ status: z.literal('review') }),
 ]);
@@ -164,36 +164,67 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
       }
       const guest = await client.query(
         `SELECT id, name, invitation_status, person_face_id FROM guests
-         WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL FOR UPDATE`, [identification.guestId, eventId.data],
+         WHERE person_face_id = $1 AND event_id = $2 AND deleted_at IS NULL
+         ORDER BY CASE WHEN invitation_status IN ('accepted', 'attended') THEN 0 ELSE 1 END, created_at
+         LIMIT 1 FOR UPDATE`, [identification.profileId, eventId.data],
       );
-      if (!guest.rowCount || !['accepted', 'attended'].includes(guest.rows[0].invitation_status) || !guest.rows[0].person_face_id) {
+      if (!guest.rowCount) {
+        const pending = await client.query(
+          `SELECT g.id, g.name FROM guests g
+           JOIN person_face_contacts c ON c.profile_id = $1
+            AND ((c.kind = 'email' AND c.value = lower(g.email))
+              OR (c.kind = 'phone' AND c.value = g.phone_e164))
+           WHERE g.event_id = $2 AND g.deleted_at IS NULL
+           ORDER BY g.created_at LIMIT 1`, [identification.profileId, eventId.data],
+        );
+        if (pending.rowCount) {
+          await client.query(
+            `INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', 'invitation_not_accepted', $3)`,
+            [eventId.data, pending.rows[0].id, identification.confidence],
+          );
+          await client.query('COMMIT');
+          return { action: 'denied', reason: 'invitation_not_accepted', guestName: pending.rows[0].name };
+        }
+        const knownPerson = await client.query(
+          `SELECT name FROM guests WHERE person_face_id = $1 AND deleted_at IS NULL
+           ORDER BY created_at LIMIT 1`, [identification.profileId],
+        );
         await client.query(
-          `INSERT INTO access_events (event_id, action, reason, confidence) VALUES ($1, 'denied', 'guest_not_eligible', $2)`,
+          `INSERT INTO access_events (event_id, action, reason, confidence) VALUES ($1, 'denied', 'not_invited', $2)`,
           [eventId.data, identification.confidence],
         );
         await client.query('COMMIT');
-        return { action: 'denied', reason: 'guest_not_eligible' };
+        return { action: 'denied', reason: 'not_invited', guestName: knownPerson.rows[0]?.name };
       }
+      if (!['accepted', 'attended'].includes(guest.rows[0].invitation_status)) {
+        await client.query(
+          `INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', 'invitation_not_accepted', $3)`,
+          [eventId.data, guest.rows[0].id, identification.confidence],
+        );
+        await client.query('COMMIT');
+        return { action: 'denied', reason: 'invitation_not_accepted', guestName: guest.rows[0].name };
+      }
+      const guestId = guest.rows[0].id;
       const last = await client.query(
         `SELECT action FROM access_events WHERE event_id = $1 AND guest_id = $2 AND action IN ('entry', 'exit')
-         ORDER BY created_at DESC, id DESC LIMIT 1`, [eventId.data, identification.guestId],
+         ORDER BY created_at DESC, id DESC LIMIT 1`, [eventId.data, guestId],
       );
       const current = last.rows[0]?.action === 'entry' ? 'inside' : 'outside';
       if (body.data.direction === 'entry' && current === 'inside' || body.data.direction === 'exit' && current === 'outside') {
         const reason = current === 'inside' ? 'already_inside' : 'not_inside';
-        await client.query(`INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', $3, $4)`, [eventId.data, identification.guestId, reason, identification.confidence]);
+        await client.query(`INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', $3, $4)`, [eventId.data, guestId, reason, identification.confidence]);
         await client.query('COMMIT');
-        return { action: 'denied', reason, guestId: identification.guestId, guestName: guest.rows[0].name };
+        return { action: 'denied', reason, guestId, guestName: guest.rows[0].name };
       }
       const action = body.data.direction ?? (current === 'inside' ? 'exit' : 'entry');
       const inserted = await client.query(
         `INSERT INTO access_events (event_id, guest_id, action, confidence) VALUES ($1, $2, $3, $4)
          RETURNING id, created_at AS "createdAt"`,
-        [eventId.data, identification.guestId, action, identification.confidence],
+        [eventId.data, guestId, action, identification.confidence],
       );
-      if (action === 'entry') await client.query("UPDATE guests SET invitation_status = 'attended' WHERE id = $1 AND invitation_status = 'accepted'", [identification.guestId]);
+      if (action === 'entry') await client.query("UPDATE guests SET invitation_status = 'attended' WHERE id = $1 AND invitation_status = 'accepted'", [guestId]);
       await client.query('COMMIT');
-      return { action, guestId: identification.guestId, guestName: guest.rows[0].name, ...inserted.rows[0] };
+      return { action, guestId, guestName: guest.rows[0].name, ...inserted.rows[0] };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -242,10 +273,25 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     reply.header('Cache-Control', 'no-store');
     if (identification.status !== 'match') return { matched: false, reason: identification.status };
     const guest = await db.query(
-      `SELECT id, name FROM guests WHERE id = $1 AND event_id = $2 AND deleted_at IS NULL AND invitation_status IN ('accepted', 'attended') AND person_face_id IS NOT NULL`,
-      [identification.guestId, eventId.data],
+      `SELECT id, name FROM guests WHERE person_face_id = $1 AND event_id = $2 AND deleted_at IS NULL
+       AND invitation_status IN ('accepted', 'attended') ORDER BY created_at LIMIT 1`,
+      [identification.profileId, eventId.data],
     );
-    if (!guest.rowCount) return { matched: false, reason: 'not_invited' };
+    if (!guest.rowCount) {
+      const pending = await db.query(
+        `SELECT g.name FROM guests g JOIN person_face_contacts c ON c.profile_id = $1
+          AND ((c.kind = 'email' AND c.value = lower(g.email))
+            OR (c.kind = 'phone' AND c.value = g.phone_e164))
+         WHERE g.event_id = $2 AND g.deleted_at IS NULL ORDER BY g.created_at LIMIT 1`,
+        [identification.profileId, eventId.data],
+      );
+      if (pending.rowCount) return { matched: false, reason: 'invitation_not_accepted', guestName: pending.rows[0].name };
+      const knownPerson = await db.query(
+        `SELECT name FROM guests WHERE person_face_id = $1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1`,
+        [identification.profileId],
+      );
+      return { matched: false, reason: 'not_invited', guestName: knownPerson.rows[0]?.name };
+    }
     return { matched: true, guestId: guest.rows[0].id, guestName: guest.rows[0].name, confidence: identification.confidence };
   });
 }

@@ -30,8 +30,8 @@ const faceServer = createServer(async (request, response) => {
     return response.end(JSON.stringify({ profileId: body.guestId, result: 'enrolled' }));
   }
   if (request.url === '/v1/identify') {
-    return response.end(JSON.stringify(enrolled && body.eventId === enrolled.eventId && body.imageBase64 === enrolled.imageBase64
-      ? { status: 'match', guestId: enrolled.guestId, confidence: 0.99 }
+    return response.end(JSON.stringify(enrolled && body.imageBase64 === enrolled.imageBase64
+      ? { status: 'match', profileId: enrolled.guestId, confidence: 0.99 }
       : { status: 'no_match' }));
   }
   response.writeHead(404).end();

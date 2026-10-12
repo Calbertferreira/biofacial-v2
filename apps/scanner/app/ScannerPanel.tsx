@@ -51,9 +51,12 @@ async function json<T = unknown>(path: string, options?: RequestInit): Promise<T
 function resultMessage(result: Result): string {
   if (result.reason === 'already_inside') return `${result.guestName ?? 'Este convidado'} já entrou no evento.`;
   if (result.reason === 'not_inside') return `${result.guestName ?? 'Este convidado'} ainda não registrou entrada.`;
-  if (result.reason === 'no_match') return 'Não encontramos este rosto entre os convidados do evento.';
+  if (result.reason === 'no_match') return 'Pessoa não encontrada em nossa base de dados.';
   if (result.reason === 'review') return 'A identificação não foi conclusiva. Confira o convite com o organizador.';
-  if (result.reason === 'guest_not_eligible') return 'O rosto foi identificado, mas o convite não está aceito para este evento.';
+  if (result.reason === 'not_invited') return result.guestName
+    ? `Pessoa identificada: ${result.guestName}. Não convidada para este evento.`
+    : 'Pessoa identificada, mas não convidada para este evento.';
+  if (result.reason === 'invitation_not_accepted') return `${result.guestName ?? 'Esta pessoa'} ainda não aceitou o convite para este evento.`;
   return result.guestName ?? 'Acesso negado. Confira o convite com o organizador.';
 }
 
@@ -66,8 +69,12 @@ export default function ScannerPanel({ initialEventId }: { initialEventId: strin
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [autoMode, setAutoMode] = useState<'entry' | 'exit' | null>(null);
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
+  const scanning = useRef(false);
+  const nextAutomaticScan = useRef(0);
+  const scanRef = useRef<(direction: 'entry' | 'exit') => Promise<void>>(async () => {});
   const selectedEvent = events.find(item => item.id === eventId);
 
   useEffect(() => { void (async () => {
@@ -90,8 +97,9 @@ export default function ScannerPanel({ initialEventId }: { initialEventId: strin
   }
 
   async function scan(direction: 'entry' | 'exit') {
-    if (!video.current || !eventId) return;
-    setBusy(true); setError(''); setMessage(''); setResult(null);
+    if (!video.current || !eventId || scanning.current) return;
+    scanning.current = true;
+    setBusy(true); setError(''); setMessage('');
     try {
       const canvas = document.createElement('canvas');
       if (!video.current.videoWidth || !video.current.videoHeight) throw new Error('Aguarde a câmera carregar e tente novamente.');
@@ -99,10 +107,21 @@ export default function ScannerPanel({ initialEventId }: { initialEventId: strin
       canvas.width = width; canvas.height = Math.round(video.current.videoHeight * width / video.current.videoWidth);
       canvas.getContext('2d')?.drawImage(video.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL('image/jpeg', .82).split(',')[1];
-      setResult(await json<Result>('/api/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ eventId, imageBase64, direction }) }));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível identificar o rosto. Tente novamente.'); }
-    finally { setBusy(false); }
+      const outcome = await json<Result>('/api/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ eventId, imageBase64, direction }) });
+      setResult(outcome);
+      if (outcome.action === 'entry' || outcome.action === 'exit') nextAutomaticScan.current = Date.now() + 8_000;
+    } catch (cause) { setResult(null); setError(cause instanceof Error ? cause.message : 'Não foi possível identificar o rosto. Tente novamente.'); }
+    finally { scanning.current = false; setBusy(false); }
   }
+
+  useEffect(() => { scanRef.current = scan; });
+  useEffect(() => {
+    if (!cameraReady || !eventId || !autoMode) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && Date.now() >= nextAutomaticScan.current) void scanRef.current(autoMode);
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [cameraReady, eventId, autoMode]);
 
   if (!user) return <section className="panel"><h2>Acesso do operador</h2><p>Entre com uma conta autorizada para operar o scanner.</p><form noValidate onSubmit={event => {
     event.preventDefault(); const form = new FormData(event.currentTarget); const email = String(form.get('email') ?? '').trim(); const password = String(form.get('password') ?? '');
@@ -116,12 +135,12 @@ export default function ScannerPanel({ initialEventId }: { initialEventId: strin
   }}><label>E-mail<input name="email" type="email" required autoComplete="username" /></label><label>Senha<input name="password" type="password" required autoComplete="current-password" /></label><button disabled={busy}>{busy ? 'Entrando...' : 'Entrar'}</button></form>{message && <p role="status">{message}</p>}{error && <p role="alert" className="error">{error}</p>}</section>;
 
   if (user.mustChangePassword) return <section className="panel"><p role="alert" className="error">Altere sua senha no Manager antes de operar o scanner.</p></section>;
-  return <section className="panel"><div className="toolbar"><span>Operador: {user.name}</span><button className="secondary" disabled={busy} onClick={async () => { try { await json('/api/session/logout', { method: 'POST' }); setUser(null); stream.current?.getTracks().forEach(track => track.stop()); setCameraReady(false); setMessage('Você saiu do scanner com segurança.'); setError(''); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível sair. Tente novamente.'); } }}>Sair</button></div>
-    <label>Evento ativo<select value={eventId} onChange={event => { setEventId(event.target.value); setResult(null); setError(''); }}><option value="">Selecione um evento</option>{events.filter(item => item.status === 'active').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+  return <section className="panel"><div className="toolbar"><span>Operador: {user.name}</span><button className="secondary" disabled={busy} onClick={async () => { try { await json('/api/session/logout', { method: 'POST' }); setUser(null); stream.current?.getTracks().forEach(track => track.stop()); setCameraReady(false); setAutoMode(null); setMessage('Você saiu do scanner com segurança.'); setError(''); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível sair. Tente novamente.'); } }}>Sair</button></div>
+    <label>Evento ativo<select value={eventId} onChange={event => { setEventId(event.target.value); setAutoMode(null); setResult(null); setError(''); }}><option value="">Selecione um evento</option>{events.filter(item => item.status === 'active').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
     {selectedEvent && <p className="eventSchedule">Entradas e saídas disponíveis de {formatEventTime(selectedEvent.startsAt, selectedEvent.timezone)} até {formatEventTime(selectedEvent.endsAt, selectedEvent.timezone)}.</p>}
     <div className="camera"><video ref={video} playsInline muted autoPlay /></div>
-    {!cameraReady ? <button onClick={() => void startCamera()}>Abrir câmera</button> : <div className="scanButtons"><button disabled={busy || !eventId} onClick={() => void scan('entry')}>{busy ? 'Identificando...' : 'Registrar entrada'}</button><button disabled={busy || !eventId} onClick={() => void scan('exit')}>{busy ? 'Identificando...' : 'Registrar saída'}</button></div>}
-    {result && <div className={`result ${result.action}`} role="status"><strong>{result.action === 'entry' ? 'ENTRADA AUTORIZADA' : result.action === 'exit' ? 'SAÍDA REGISTRADA' : 'ACESSO NEGADO'}</strong><p>{resultMessage(result)}</p></div>}
+    {!cameraReady ? <button onClick={() => void startCamera()}>Abrir câmera</button> : <><div className="scanButtons"><button disabled={busy || !eventId || !!autoMode} onClick={() => void scan('entry')}>{busy ? 'Identificando...' : 'Registrar entrada'}</button><button disabled={busy || !eventId || !!autoMode} onClick={() => void scan('exit')}>{busy ? 'Identificando...' : 'Registrar saída'}</button></div><div className="scanButtons"><button className="secondary" disabled={!eventId || autoMode === 'entry'} onClick={() => { nextAutomaticScan.current = 0; setAutoMode('entry'); }}>Iniciar leitura automática de entrada</button><button className="secondary" disabled={!eventId || autoMode === 'exit'} onClick={() => { nextAutomaticScan.current = 0; setAutoMode('exit'); }}>Iniciar leitura automática de saída</button>{autoMode && <button className="secondary" onClick={() => setAutoMode(null)}>Pausar leitura automática</button>}</div>{autoMode && <p role="status">Leitura automática de {autoMode === 'entry' ? 'entrada' : 'saída'} ativa. Posicione uma pessoa de cada vez diante da câmera.</p>}</>}
+    {result && <div className={`result ${result.action}`} role={result.action === 'denied' ? 'alert' : 'status'}><strong>{result.action === 'entry' ? 'ENTRADA AUTORIZADA' : result.action === 'exit' ? 'SAÍDA REGISTRADA' : 'ACESSO NEGADO'}</strong><p>{resultMessage(result)}</p></div>}
     {message && <p role="status">{message}</p>}
     {error && <p role="alert" className="error">{error}</p>}
   </section>;

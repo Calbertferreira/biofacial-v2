@@ -11,6 +11,7 @@ const messages: Record<string, string> = {
   exactly_one_face_required: 'A foto deve mostrar apenas um rosto, bem iluminado.',
   face_engine_unavailable: 'O reconhecimento está indisponível. Tente novamente em instantes.',
   face_mismatch: 'A selfie não é compatível com a foto do nosso cadastro. Posicione o rosto de frente para a câmera e tente capturar outra foto.',
+  face_review_required: 'A comparação facial não foi conclusiva. Tire outra selfie de frente para a câmera, com boa iluminação. Se o problema continuar, procure o organizador.',
   identity_conflict: 'O e-mail e o telefone deste convite estão vinculados a cadastros diferentes. Procure o organizador para corrigir os dados.',
   face_model_mismatch: 'Não foi possível comparar a foto com o cadastro existente. Procure o organizador.',
   face_already_registered_for_event: 'Este rosto já confirmou outro convite para o mesmo evento. Procure o organizador para corrigir a lista.',

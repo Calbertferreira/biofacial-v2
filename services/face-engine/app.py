@@ -93,6 +93,21 @@ def extract(image_base64: str) -> tuple[np.ndarray, np.ndarray]:
     return feature, image
 
 
+def ranked_profiles(conn, feature: np.ndarray):
+    rows = conn.execute(
+        "SELECT id, embedding_ciphertext FROM person_face_profiles WHERE model = %s",
+        (MODEL,),
+    ).fetchall()
+    scores = []
+    for profile_id, encrypted in rows:
+        template = np.frombuffer(CIPHER.decrypt(bytes(encrypted)), dtype=np.float32)
+        if template.shape != feature.shape:
+            continue
+        scores.append((float(np.dot(feature, template)), profile_id))
+    scores.sort(key=lambda item: item[0], reverse=True)
+    return scores
+
+
 @app.get("/health")
 def health():
     with connection() as conn:
@@ -129,6 +144,8 @@ def verify_or_enroll(payload: EnrollRequest, authorization: str | None = Header(
             if len(profile_ids) > 1:
                 raise HTTPException(409, "identity_conflict")
             profile_id = next(iter(profile_ids), None)
+            ranked = ranked_profiles(conn, feature)
+            closest = ranked[0] if ranked else None
             if profile_id:
                 stored = conn.execute(
                     "SELECT embedding_ciphertext, model FROM person_face_profiles WHERE id = %s FOR UPDATE",
@@ -139,17 +156,27 @@ def verify_or_enroll(payload: EnrollRequest, authorization: str | None = Header(
                 template = np.frombuffer(CIPHER.decrypt(bytes(stored[0])), dtype=np.float32)
                 if float(np.dot(feature, template)) < 0.55:
                     raise HTTPException(409, "face_mismatch")
+                if closest and closest[1] != profile_id and closest[0] >= 0.55:
+                    raise HTTPException(409, "identity_conflict")
                 result = "matched"
             else:
-                encoded, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                if not encoded:
-                    raise HTTPException(422, "invalid_image")
-                profile_id = conn.execute(
-                    """INSERT INTO person_face_profiles (embedding_ciphertext, image_ciphertext, model)
-                       VALUES (%s, %s, %s) RETURNING id""",
-                    (CIPHER.encrypt(feature.tobytes()), CIPHER.encrypt(jpeg.tobytes()), MODEL),
-                ).fetchone()[0]
-                result = "enrolled"
+                if closest and closest[0] >= 0.55:
+                    if len(ranked) > 1 and closest[0] - ranked[1][0] < 0.08:
+                        raise HTTPException(409, "face_review_required")
+                    profile_id = closest[1]
+                    result = "matched"
+                elif closest and closest[0] >= 0.45:
+                    raise HTTPException(409, "face_review_required")
+                else:
+                    encoded, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    if not encoded:
+                        raise HTTPException(422, "invalid_image")
+                    profile_id = conn.execute(
+                        """INSERT INTO person_face_profiles (embedding_ciphertext, image_ciphertext, model)
+                           VALUES (%s, %s, %s) RETURNING id""",
+                        (CIPHER.encrypt(feature.tobytes()), CIPHER.encrypt(jpeg.tobytes()), MODEL),
+                    ).fetchone()[0]
+                    result = "enrolled"
             duplicate = conn.execute(
                 """SELECT 1 FROM guests WHERE event_id = %s AND id <> %s
                    AND person_face_id = %s AND deleted_at IS NULL
@@ -174,20 +201,9 @@ def identify(payload: FaceRequest, authorization: str | None = Header(default=No
     authorize(authorization)
     query, _ = extract(payload.imageBase64)
     with connection() as conn:
-        rows = conn.execute(
-            """SELECT g.id, p.embedding_ciphertext FROM guests g
-                 JOIN person_face_profiles p ON p.id = g.person_face_id
-                WHERE g.event_id = %s AND g.deleted_at IS NULL AND g.invitation_status IN ('accepted', 'attended')
-                  AND p.image_ciphertext IS NOT NULL AND p.model = %s""",
-            (payload.eventId, MODEL),
-        ).fetchall()
-    scores = []
-    for guest_id, encrypted in rows:
-        template = np.frombuffer(CIPHER.decrypt(bytes(encrypted)), dtype=np.float32)
-        scores.append((float(np.dot(query, template)), str(guest_id)))
-    scores.sort(reverse=True)
+        scores = ranked_profiles(conn, query)
     if not scores or scores[0][0] < 0.45:
         return {"status": "no_match"}
     if scores[0][0] < 0.55 or (len(scores) > 1 and scores[0][0] - scores[1][0] < 0.08):
         return {"status": "review"}
-    return {"status": "match", "guestId": scores[0][1], "confidence": min(1.0, max(0.0, scores[0][0]))}
+    return {"status": "match", "profileId": str(scores[0][1]), "confidence": min(1.0, max(0.0, scores[0][0]))}
