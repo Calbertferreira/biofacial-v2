@@ -1,36 +1,19 @@
-# Plano de implementação
+# Estado funcional e próximos passos
 
-## Etapa 1 — base (neste repositório)
+## Implementado no código atual
 
-- Monorepo independente dos sistemas atuais.
-- Modelo de eventos, convidados, convites e auditoria.
-- API para criar evento, adicionar convidados, consultar e aceitar convite, ativar evento e registrar entrada, saída e negativa. O reconhecimento real ainda depende do motor facial.
-- Três aplicações web implantáveis separadamente.
-- Contrato do serviço facial definido sem usar os pesos `buffalo_l` do protótipo.
+Monorepo e três aplicações web separadas; clientes e usuários com `adm`/`staff`/`gestor`; vínculos de gestores a vários clientes; autenticação com sessão revogável; eventos e convidados por cliente; URL exclusiva; aceite público com consentimento e foto; reutilização de perfil no mesmo cliente; motor YuNet/SFace privado com vetor cifrado; ativação e finalização; identificação restrita ao evento; entrada, saída, negativa e histórico; consulta facial sem registrar passagem.
 
-## Etapa 2 — identidade e inscrição
+## Validado em testes
 
-- Login local de usuários da aplicação com papéis `adm`, `staff` e `gestor` e escopo por cliente implementado; OIDC e MFA administrativos ainda pendentes.
-- Cadastro consentido de biometria com prova de vida e prevenção de foto de tela.
-- Associação entre a identidade facial e o convidado, com reutilização de cadastro mediante consentimento.
-- Política de retenção, exclusão, base legal e registros de consentimento revisados juridicamente.
+Compilação/tipos e testes locais com substituto facial; fluxo HTTP do ambiente publicado com motor facial real e foto de amostra, incluindo duplicidade, ausência de correspondência e reutilização. A câmera física de celular/tablet e a qualidade estatística do reconhecimento precisam de teste presencial. [Detalhes](testing-and-operations.md).
 
-## Etapa 3 — operação do evento
+## Necessário antes de operação em escala
 
-- Scanner com identificação 1:N restrita ao evento, revisão de limiar e prevenção de duplicidade.
-- Registro de entrada, saída e tentativas negadas com horário e motivo. O vínculo com dispositivo ainda falta.
-- Fila de envio de convites por email/WhatsApp, retries e idempotência.
-- Procedimento de contingência quando o serviço facial ou rede falhar.
+1. **Biometria e privacidade:** prova de vida/anti-spoofing, calibração de limiares, avaliação de viés, consentimento versionado, base legal, retenção/exclusão e rotação de chave.
+2. **Operação de acesso:** ensaio com tablets reais, identificação de dispositivo/operador por tentativa, contingência offline ou manual, monitoramento de indisponibilidade e paginação/exportação do histórico.
+3. **Convites:** envio por WhatsApp/e-mail com fila, retry, idempotência, status de entrega e proteção adicional da posse do link quando necessário.
+4. **Segurança administrativa:** MFA, recuperação de senha, limitação distribuída, auditoria de alterações e revisão de conexão TLS/certificado do banco pelo motor.
+5. **Acompanhamento:** check-ins em tempo real, cálculo de permanência, depoimentos moderados, gráficos, integração consentida com redes sociais e exportação após finalização.
 
-## Etapa 4 — acompanhamento
-
-- Painel em tempo real, depoimentos moderados, satisfação e métricas de permanência.
-- Finalização do evento, consolidação de indicadores e exportação.
-- Teste de carga no tablet e na região de implantação antes da operação real.
-
-## Decisões pendentes
-
-- Modelo facial com licença comercial e validação de desempenho/viés.
-- Provedor de WhatsApp/email e respectivos templates.
-- Provedor de identidade do administrador.
-- Base legal e prazos de retenção dos dados sensíveis.
+Os estados `published`, `cancelled`, `declined` e `expired` existem no banco, mas não têm fluxo completo publicado. As métricas do Manager são básicas e não devem ser apresentadas como medição de satisfação. A escolha do provedor de mensageria e as políticas jurídicas/operacionais ainda dependem de decisão do projeto.

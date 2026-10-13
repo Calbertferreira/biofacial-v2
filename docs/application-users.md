@@ -1,27 +1,26 @@
-# Usuários da aplicação e clientes
+# Contas da aplicação e clientes
 
-Convidados de eventos continuam em `guests`. As pessoas que operam o produto ficam em `app_users`; os clientes ficam em `clients`. Um evento novo contém `client_id`. A tabela `user_clients` permite que um gestor pertença a vários clientes, sem duplicar sua conta. `user_sessions` guarda somente o hash dos tokens de sessão.
+`app_users` representa operadores; `guests` representa convidados e não recebe login administrativo. `clients` representa organizações. A relação muitos para muitos `user_clients` dá acesso de um gestor a um ou mais clientes. Eventos novos devem apontar para um cliente ativo.
 
-## Papéis
+## Papéis aplicados pela API
 
-| Papel | Consulta | Cadastro e alteração |
-| --- | --- | --- |
-| `adm` | Todos os clientes, usuários, eventos, convidados e registros de acesso | Clientes, usuários de qualquer papel, eventos e convidados de qualquer cliente |
-| `staff` | Todos os clientes, usuários, eventos, convidados e registros de acesso | Nenhum cadastro |
-| `gestor` | Clientes vinculados, seus eventos e convidados, e gestores que compartilham esses clientes | Eventos e convidados dos clientes vinculados; novos gestores vinculados somente a um subconjunto dos próprios clientes |
+| Operação | `adm` | `staff` | `gestor` |
+| --- | --- | --- | --- |
+| Consultar clientes, usuários, eventos, convidados, histórico | todos | todos | somente clientes associados; usuários gestores visíveis no escopo |
+| Criar/alterar cliente | sim | não | não |
+| Criar usuários | qualquer papel | não | apenas `gestor` com clientes dentro dos próprios vínculos |
+| Alterar usuários | sim | não | não |
+| Criar/alterar evento e convidado | qualquer cliente | não | clientes associados |
+| Ativar/finalizar evento | qualquer cliente | não | clientes associados |
+| Registrar entrada/saída no Scanner | sim | sim | clientes associados |
+| `face-lookup` sem registro de acesso | sim | não | clientes associados |
 
-Um gestor com dois clientes aparece uma vez em `app_users` e possui duas linhas em `user_clients`. As respostas de lista para gestores mostram somente os vínculos que o próprio solicitante pode ver. Contas inativas não conseguem iniciar sessão; alterações de papel, ativação e senha revogam as sessões existentes.
+Uma conta inativa não inicia sessão. `must_change_password` restringe ações até a troca da senha temporária. Mudanças de papel, ativação ou senha revogam sessões antigas. Eventos migrados anteriores à tabela de clientes podem ter `client_id` nulo; apenas `adm` e `staff` conseguem visualizá-los.
 
-## Administrador inicial
+## Primeiro administrador
 
-O bootstrap criou a conta `admin@biofacial.local`, com senha aleatória temporária. As credenciais estão em `.bootstrap-admin.txt` na raiz do projeto; o arquivo é ignorado pelo Git. A primeira autenticação só permite consultar a própria conta, trocar a senha ou sair. Após a troca, é necessário entrar novamente. Apague o arquivo local após registrar sua nova senha em um gerenciador de senhas.
+`packages/db/src/bootstrap-admin.mjs` cria o primeiro `adm` com senha temporária aleatória, somente quando ainda não existe outro `adm`. A senha não deve entrar em Git ou nesta documentação. Use o arquivo local gerado pelo bootstrap ou o procedimento autorizado de recuperação para o ambiente correspondente; troque a senha no primeiro login e armazene a nova em um gerenciador de segredos. A existência de um e-mail administrativo específico não é pressuposta por este guia.
 
-O comando `node --env-file=../../.env src/bootstrap-admin.mjs` em `packages/db` recusa criar outra conta se já existir um `adm`. Para alterar o email do administrador, use `PATCH /v1/users/{id}` depois do primeiro login.
+## Integrações de terceiros
 
-## Segurança atual
-
-Senhas usam `scrypt` com salt aleatório. Tokens opacos de 256 bits são devolvidos uma vez no login; o banco armazena apenas SHA-256 do token. A sessão dura 12 horas, pode ser encerrada por logout e é revogada na troca de senha. Cinco falhas seguidas bloqueiam a conta por 15 minutos.
-
-O Manager guarda o token em cookie `HttpOnly` e `SameSite=Lax`. As rotas do navegador validam a origem das operações de escrita. Antes de publicar, adicione limitação distribuída de requisições, recuperação de senha, auditoria administrativa, TLS/domínios definitivos e autenticação multifator para administradores.
-
-Os eventos de teste criados antes desta migração permanecem com `client_id` nulo. Apenas `adm` e `staff` conseguem consultá-los; gestores não recebem acesso a eles.
+Uma aplicação externa usa `POST /v1/auth/login` e Bearer em chamadas de cadastro. Escolha conta com escopo mínimo necessário. O token dura 12 horas e pode ser revogado por logout. Não repasse conta `adm` ou `SCANNER_API_KEY` ao navegador. Exemplos e formatos em [API para integrações](external-api.md).

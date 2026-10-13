@@ -1,33 +1,36 @@
 # BioFacial v2
 
-Nova implementação do fluxo de clientes, usuários da aplicação, eventos, convites e acesso facial. Os projetos legados permanecem em suas pastas originais.
+Sistema de gestão de eventos, convites individuais, inscrição facial e controle de entrada e saída. Este repositório é um monorepo independente da versão anterior.
 
-## Componentes
+## Aplicações
 
-| Pasta | Destino | Responsabilidade |
-| --- | --- | --- |
-| `apps/manager` | Vercel | Administração do evento e indicadores |
-| `apps/invite` | Vercel | Convite individual e cadastro no celular |
-| `apps/scanner` | Vercel | Interface de entrada no tablet |
-| `apps/api` | Railway | Regras de negócio e persistência |
-| `services/face-engine` | Railway privado | Detecção e comparação facial, modelos criptografados |
-| `packages/contracts` | Compartilhado | Tipos e validações HTTP |
-| `packages/db` | Neon | Migração SQL e acesso ao banco |
+| Componente | Pasta | Hospedagem de teste | Função |
+| --- | --- | --- | --- |
+| Manager | `apps/manager` | [biofacial.vercel.app/admin](https://biofacial.vercel.app/admin) | Clientes, usuários, eventos, convidados e histórico |
+| Convite Facial | `apps/invite` | [biofacial-convite.vercel.app](https://biofacial-convite.vercel.app) | Aceite individual e captura facial no celular |
+| Scanner | `apps/scanner` | [biofacial-scanner.vercel.app](https://biofacial-scanner.vercel.app) | Identificação e registro de entrada ou saída no tablet |
+| API | `apps/api` | [health](https://api-production-34f89.up.railway.app/health) | Autenticação, autorização, regras de negócio e persistência |
+| Motor facial | `services/face-engine` | Railway, rede privada | Detecção, extração e comparação biométrica |
 
-## Começar localmente
+Banco: Neon PostgreSQL. Contratos compartilhados: `packages/contracts`. Migrações: `packages/db`.
 
-1. Instale Node 24 e pnpm 11.
-2. Execute `pnpm install` na raiz.
-3. Crie `.env` a partir de `.env.example` e configure um banco PostgreSQL/Neon de desenvolvimento.
-4. Execute `pnpm --filter @biofacial/db migrate:local`.
-5. Inicie a API com `pnpm dev:api` e as interfaces com `pnpm dev:manager`, `pnpm dev:invite` e `pnpm dev:scanner` em terminais separados.
+## Documentação
 
-Portas locais: Manager 3000, Convite 3002, Scanner 3003 e API 3001. A aplicação de convites usa `API_INTERNAL_URL` ou `NEXT_PUBLIC_API_URL` para localizar a API; localmente usa `http://localhost:3001` como padrão.
+Comece pelo [índice completo](docs/README.md). Ele separa arquitetura, mapa de tecnologias, descrição detalhada de cada serviço, API, dados, segurança, testes e implantação. Os relatórios datados em `docs/` registram testes históricos e não substituem o estado atual documentado no índice.
 
-## Estado da implementação
+## Execução local
 
-Esta etapa inclui clientes, usuários `adm`/`staff`/`gestor`, eventos por cliente, convidados, consulta e aceite de convites, entrada/saída e consulta facial por evento. O Manager local abre o cadastro em `http://localhost:3000` (redirecionado para `/admin`; na validação atual, `http://127.0.0.1:3100/admin`). A demonstração antiga permanece em `/demo`. Veja [usuários e clientes](docs/application-users.md) e [rotas externas](docs/external-api.md).
+Requisitos: Node.js 24, pnpm 11, Python 3.11 para o motor facial, e PostgreSQL/Neon. Na raiz:
 
-O Manager cria convidados, exibe o link individual, ativa e finaliza eventos e mostra o histórico de acesso. O Convite Facial captura a foto no celular após consentimento. O Scanner exige login e usa a câmera do tablet para registrar entrada e saída. O motor facial privado executa detecção e comparação reais; as imagens não são persistidas. O envio automático por WhatsApp ou e-mail, depoimentos, gráficos de satisfação e prova de vida ainda não fazem parte desta versão.
+```powershell
+pnpm install
+Copy-Item .env.example .env
+pnpm --filter @biofacial/db migrate:local
+pnpm dev:api
+```
 
-Para os endereços e variáveis de implantação, veja [publicação de teste](docs/web-preview.md). A API falha fechada quando o motor facial não está disponível.
+Em terminais separados, rode `pnpm dev:manager`, `pnpm dev:invite` e `pnpm dev:scanner`. Portas padrão: Manager 3000, API 3001, Convite 3002 e Scanner 3003. Configure as variáveis do motor facial descritas em [implantação](docs/deployment.md) para executar a biometria real. Não salve credenciais no repositório.
+
+## Situação funcional
+
+O fluxo de cliente → evento → convidado → convite → aceite facial → ativação → entrada/saída → histórico → finalização está implementado. Há três aplicações web separadas e uma API com motor facial privado. A captura real em tablet, os limiares biométricos e a operação com público ainda exigem validação presencial. Entrega automática de convite, prova de vida, depoimentos e indicadores de satisfação estão planejados; veja [lacunas e próximos passos](docs/roadmap.md).

@@ -1,7 +1,5 @@
-# Teste ponta a ponta de desenvolvimento
+# Teste ponta a ponta local
 
-Com a migração aplicada e a API compilada, execute `pnpm test:e2e` na raiz. O teste inicia uma API temporária e um substituto local do serviço facial. Ele cria no Neon um evento `E2E BioFacial ...` e um convidado com endereço `example.invalid`; não envia email nem WhatsApp.
+Depois de configurar `.env`, aplicar migrações e construir os pacotes, execute `pnpm test:e2e` na raiz. O script `tests/e2e.mjs` inicia API temporária e substituto local do motor facial, cria evento e convidado de teste no banco configurado, consulta link individual, aceita convite, ativa evento, registra negativa, entrada e saída e confere o histórico. Ele deixa dados de teste no banco para inspeção. Use somente banco de desenvolvimento.
 
-O roteiro consulta o link exclusivo, aceita o convite com consentimento e uma captura de teste, ativa o evento, registra uma tentativa sem correspondência, uma entrada e uma saída. Em seguida consulta o histórico pela API e exige a ordem `denied`, `entry`, `exit`. O evento e as tentativas ficam no banco de desenvolvimento para inspeção.
-
-O substituto compara bytes idênticos e devolve uma identidade predeterminada. Ele **não** testa reconhecimento facial, prova de vida, entrega de mensagens, câmera do tablet ou implantação Vercel/Railway. Nunca deve ser configurado como serviço facial de produção.
+O substituto facial retorna correspondências predeterminadas. Logo, esse teste verifica contrato HTTP, transações e estado de acesso, mas não qualidade biométrica, câmera, deploy Vercel/Railway ou envio de mensagens. Para autorização por papel, execute também `pnpm test:rbac`. Para evidência do ambiente publicado com motor real, consulte [testes e operação](testing-and-operations.md). Os relatórios `e2e-run-2026-09-26.md` e `browser-run-2026-09-26.md` são registros históricos.
