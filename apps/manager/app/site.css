@@ -213,6 +213,11 @@ button, input, select, textarea { font-family: inherit; }
 .tableStatus.isActive { background: #e5f5e9; color: #176239; }
 .tableStatus.isInactive { background: #ffebe9; color: #922722; }
 .tableStatus.isNeutral { background: #f4ead6; color: #6b491c; }
+.tableStatus.eventStatus--draft { background: #edf0f3; color: #46515f; }
+.tableStatus.eventStatus--published { background: #e7f0ff; color: #17478f; }
+.tableStatus.eventStatus--active { background: #e5f5e9; color: #176239; }
+.tableStatus.eventStatus--finished { background: #fde8e8; color: #a11f25; }
+.tableStatus.eventStatus--cancelled { background: #f0e8f8; color: #6c2d91; }
 .adminTable .tableEmpty, .guestTable .tableEmpty { padding: 24px; color: #71675b; font-size: 14px; text-align: center; }
 .guestTable { min-width: 1050px; }
 .guestTable details { min-width: 110px; }
