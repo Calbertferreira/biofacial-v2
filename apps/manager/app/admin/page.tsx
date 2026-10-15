@@ -74,6 +74,18 @@ export default function AdminPage() {
       finally { setLoading(false); }
     })();
   }, []);
+  const hasSession = Boolean(user && !user.mustChangePassword);
+  useEffect(() => {
+    if (!hasSession) return;
+    let mounted = true;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void api('/api/manage/events').then(result => {
+        if (mounted) setEvents(result.items);
+      }).catch(() => {});
+    }, 15_000);
+    return () => { mounted = false; clearInterval(timer); };
+  }, [hasSession]);
 
   async function run(task: () => Promise<void>) {
     setError(''); setMessage('');

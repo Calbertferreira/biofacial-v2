@@ -40,7 +40,7 @@ erDiagram
 
 ## Estados
 
-Evento: `draft` na criação; `published` existe no esquema, sem rota publicada; `active` por `/activate`; `finished` por `/finish`; `cancelled` por `/cancel`. Convite: `registered`, `invited`, `accepted`, `reconfirmation_pending`, `attended` e `declined`; `expired` existe sem fluxo completo. `accepted_at` preserva o primeiro aceite, enquanto `guest_responses` guarda cada resposta por revisão. Evento finalizado ou cancelado não pode ser reativado pela rota atual. [Regras de edição](event-editing-and-reconfirmation.md).
+Evento: `draft` na criação; `published` existe no esquema, sem rota publicada; `active` por `/activate`; `finished` por `/finish` ou automaticamente quando `ends_at <= now()`; `cancelled` por `/cancel`. O encerramento automático vale para eventos em `draft`, `published` ou `active`, preserva os cancelados e registra `audit_events.action = event_auto_finished`. Convite: `registered`, `invited`, `accepted`, `reconfirmation_pending`, `attended` e `declined`; `expired` existe sem fluxo completo. `accepted_at` preserva o primeiro aceite, enquanto `guest_responses` guarda cada resposta por revisão. Evento finalizado ou cancelado não pode ser reativado pela rota atual. [Regras de edição](event-editing-and-reconfirmation.md).
 
 ## Integridade e consultas
 

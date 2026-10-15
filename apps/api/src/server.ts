@@ -7,6 +7,7 @@ import { registerAuth } from './auth.js';
 import { registerManagement } from './management.js';
 import { registerInvitationDelivery } from './invitation-delivery.js';
 import { registerEventManagement } from './event-management.js';
+import { registerAutoFinish } from './auto-finish.js';
 import { actorFor, canWriteClient } from './security.js';
 import { z } from 'zod';
 
@@ -211,6 +212,7 @@ app.get('/v1/invitations/:token', async (request, reply) => {
 registerAuth(app, db);
 registerManagement(app, db);
 registerEventManagement(app, db);
+registerAutoFinish(app, db);
 registerInvitationDelivery(app, db, publicBaseUrl);
 registerFlows(app, db, { scannerKey: scannerApiKey, faceEngineUrl, faceEngineToken });
 

@@ -40,6 +40,16 @@ export default function EventDetail() {
     setEvent(detail); setGuests(guestList.items); setAccess(history.items);
   }, [eventId]);
   useEffect(() => { void load().catch(cause => setError(cause.message)); }, [load]);
+  useEffect(() => {
+    let mounted = true;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void api(`/api/manage/events/${eventId}`).then(detail => {
+        if (mounted) setEvent(detail);
+      }).catch(() => {});
+    }, 15_000);
+    return () => { mounted = false; clearInterval(timer); };
+  }, [eventId]);
   async function action(task: () => Promise<void>) {
     setBusy(true); setError(''); setMessage('');
     let completed = false;

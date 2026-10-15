@@ -58,7 +58,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     if (!event.rowCount) return reply.code(404).send({ error: 'event_not_found' });
     if (!canWriteClient(actor, event.rows[0].client_id)) return reply.code(403).send({ error: 'forbidden_client' });
     const result = await db.query(
-      `UPDATE events SET status = 'active' WHERE id = $1 AND status IN ('draft', 'published')
+      `UPDATE events SET status = 'active' WHERE id = $1 AND status IN ('draft', 'published') AND ends_at > now()
        RETURNING id, status`, [eventId.data],
     );
     if (!result.rowCount) return reply.code(409).send({ error: 'event_not_activatable' });
@@ -287,7 +287,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     if (now < new Date(event.rows[0].starts_at).getTime()) {
       return reply.code(409).send({ error: 'event_not_started', startsAt: event.rows[0].starts_at, timezone: event.rows[0].timezone });
     }
-    if (now > new Date(event.rows[0].ends_at).getTime()) {
+    if (now >= new Date(event.rows[0].ends_at).getTime()) {
       return reply.code(409).send({ error: 'event_ended' });
     }
     let identification: z.infer<typeof identifyResponse>;
@@ -312,7 +312,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
       const currentTime = Date.now();
       if (!currentEvent.rowCount || currentEvent.rows[0].status !== 'active'
         || currentTime < new Date(currentEvent.rows[0].starts_at).getTime()
-        || currentTime > new Date(currentEvent.rows[0].ends_at).getTime()) {
+        || currentTime >= new Date(currentEvent.rows[0].ends_at).getTime()) {
         await client.query('ROLLBACK'); return reply.code(409).send({ error: 'event_not_active' });
       }
       if (identification.status !== 'match') {

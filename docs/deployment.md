@@ -32,4 +32,6 @@ Use `.env.example` como inventário de variáveis e `.env` local ignorado pelo G
 
 ## Operação e reversão
 
+A API encerra automaticamente eventos vencidos na inicialização e verifica novos vencimentos a cada cinco segundos. O horário é comparado pelo PostgreSQL em `timestamptz`, independentemente do fuso configurado no navegador. O processo precisa permanecer em execução no Railway; após reinício, a verificação inicial alcança eventos vencidos durante a indisponibilidade. O Manager atualiza a lista e a tela individual a cada 15 segundos enquanto a aba está visível. O scanner já recusa acessos a partir do horário final, mesmo antes da próxima verificação de status. O índice da migração 010 mantém a busca por eventos pendentes eficiente.
+
 Conserve a versão do código, os pesos do modelo, o valor de `FACE_TEMPLATE_KEY` e backups do banco de forma controlada. Para reverter uma atualização de aplicação, implante a versão anterior compatível com o esquema; migrações de banco não devem ser revertidas por edição manual sem plano. Monitore `/health`, erros 503, latência de identificação, registros `denied`, bloqueios de login e consumo de conexões. Evite registrar tokens de sessão, links de convite ou imagens. Para indisponibilidade, interrompa a passagem automática e use procedimento presencial verificado; não substitua a identificação por aceite automático.
