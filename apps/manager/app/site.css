@@ -240,3 +240,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: normal; 
 .adminTable tbody th, .adminTable tbody td, .guestTable tbody > tr > th, .guestTable tbody > tr > td { font-size: 15px; }
 .tableCode, .tableStatus, .guestTable .deliveryTable th, .guestTable .deliveryTable td { font-size: 13px !important; }
 .eventManualLink input { font-size: 15px; }
+.eventEditorActions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.eventEditorActions .secondary, .eventEditor form .secondary { background: #eee7df; color: #5b3120; }
+.eventEditor textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid #d9d0c8; border-radius: 8px; resize: vertical; }
+.eventEditor form p.fieldFull { margin: 0; color: #645a50; }

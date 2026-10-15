@@ -71,14 +71,111 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     if (!token.success || !body.success) return reply.code(400).send({ error: 'invalid_input' });
     const hash = createHash('sha256').update(token.data).digest('hex');
     const guestResult = await db.query(
-      `SELECT g.id, g.event_id, g.invitation_status, e.status AS event_status
+      `SELECT g.id, g.event_id, g.invitation_status, e.status AS event_status,
+              g.person_face_id, g.email, g.phone_e164
        FROM guests g JOIN events e ON e.id = g.event_id
        WHERE g.deleted_at IS NULL AND (g.invitation_token_hash = $1 OR EXISTS (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1))`, [hash],
     );
     if (!guestResult.rowCount) return reply.code(404).send({ error: 'invitation_not_found' });
     const guest = guestResult.rows[0];
-    if (guest.event_status === 'finished' || guest.event_status === 'cancelled' || guest.invitation_status === 'declined') {
+    if (guest.event_status === 'finished' || guest.event_status === 'cancelled') {
       return reply.code(409).send({ error: 'invitation_unavailable' });
+    }
+    const known = await db.query(
+      `SELECT DISTINCT profile_id FROM person_face_contacts
+       WHERE (kind = 'email' AND value = lower($1))
+          OR (kind = 'phone' AND value = $2)`,
+      [guest.email, guest.phone_e164],
+    );
+    const knownIds = new Set<string>(known.rows.map(row => row.profile_id));
+    if (guest.person_face_id) knownIds.add(guest.person_face_id);
+    if (knownIds.size > 1) return reply.code(409).send({ error: 'identity_conflict' });
+    if (knownIds.size === 1) {
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT id FROM events WHERE id = $1 FOR SHARE', [guest.event_id]);
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('biofacial_face_enrollment'))");
+        const current = await client.query(
+          `SELECT g.id, g.event_id, g.invitation_status, g.email, g.phone_e164,
+                  g.person_face_id, g.confirmed_revision, e.status AS event_status, e.revision AS event_revision
+             FROM guests g JOIN events e ON e.id = g.event_id
+            WHERE g.id = $1 AND g.deleted_at IS NULL
+              AND (g.invitation_token_hash = $2 OR EXISTS (
+                SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $2
+              )) FOR UPDATE OF g`,
+          [guest.id, hash],
+        );
+        if (!current.rowCount || !['registered', 'invited', 'accepted', 'reconfirmation_pending', 'declined'].includes(current.rows[0].invitation_status)
+          || ['finished', 'cancelled'].includes(current.rows[0].event_status)) {
+          await client.query('ROLLBACK');
+          return reply.code(409).send({ error: 'invitation_unavailable' });
+        }
+        if (current.rows[0].invitation_status === 'accepted'
+          && current.rows[0].confirmed_revision === current.rows[0].event_revision
+          && current.rows[0].person_face_id) {
+          await client.query('ROLLBACK');
+          return { status: 'accepted', guestId: guest.id };
+        }
+        const contactProfiles = await client.query(
+          `SELECT DISTINCT profile_id FROM person_face_contacts
+           WHERE (kind = 'email' AND value = lower($1))
+              OR (kind = 'phone' AND value = $2)`,
+          [current.rows[0].email, current.rows[0].phone_e164],
+        );
+        const ids = new Set<string>(contactProfiles.rows.map(row => row.profile_id));
+        if (current.rows[0].person_face_id) {
+          ids.add(current.rows[0].person_face_id);
+        }
+        if (ids.size !== 1) {
+          await client.query('ROLLBACK');
+          return reply.code(409).send({ error: ids.size ? 'identity_conflict' : 'face_capture_required' });
+        }
+        const profileId = [...ids][0];
+        const duplicate = await client.query(
+          `SELECT 1 FROM guests WHERE event_id = $1 AND id <> $2
+             AND person_face_id = $3 AND deleted_at IS NULL
+             AND invitation_status IN ('accepted', 'attended') LIMIT 1`,
+          [current.rows[0].event_id, guest.id, profileId],
+        );
+        if (duplicate.rowCount) {
+          await client.query('ROLLBACK');
+          return reply.code(409).send({ error: 'face_already_registered_for_event' });
+        }
+        for (const [kind, value] of [
+          ['email', current.rows[0].email?.toLowerCase()],
+          ['phone', current.rows[0].phone_e164],
+        ] as const) {
+          if (value) {
+            await client.query(
+              `INSERT INTO person_face_contacts (kind, value, profile_id)
+               VALUES ($1, $2, $3) ON CONFLICT (kind, value) DO NOTHING`,
+              [kind, value, profileId],
+            );
+          }
+        }
+        await client.query(
+          `UPDATE guests SET person_face_id = $2, invitation_status = 'accepted',
+                  accepted_at = COALESCE(accepted_at, now()), confirmed_revision = $3 WHERE id = $1`,
+          [guest.id, profileId, current.rows[0].event_revision],
+        );
+        await client.query(
+          `INSERT INTO guest_responses (event_id, guest_id, event_revision, response)
+           VALUES ($1, $2, $3, 'accepted')`,
+          [current.rows[0].event_id, guest.id, current.rows[0].event_revision],
+        );
+        await client.query(
+          `INSERT INTO audit_events (event_id, guest_id, action) VALUES ($1, $2, 'invitation_accepted')`,
+          [current.rows[0].event_id, guest.id],
+        );
+        await client.query('COMMIT');
+        return { status: 'accepted', guestId: guest.id };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     }
     if (!body.data.imageBase64) return reply.code(422).send({ error: 'face_capture_required' });
     let profileId: string;
@@ -95,16 +192,25 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
+      const currentEvent = await client.query('SELECT revision, status FROM events WHERE id = $1 FOR SHARE', [guest.event_id]);
+      if (!currentEvent.rowCount || ['finished', 'cancelled'].includes(currentEvent.rows[0].status)) {
+        await client.query('ROLLBACK'); return reply.code(409).send({ error: 'invitation_unavailable' });
+      }
       const updated = await client.query(
         `UPDATE guests SET person_face_id = $2,
-                            invitation_status = 'accepted', accepted_at = COALESCE(accepted_at, now())
-         WHERE id = $1 AND deleted_at IS NULL AND invitation_status IN ('registered', 'invited', 'accepted') RETURNING id, event_id, invitation_status`,
-        [guest.id, profileId],
+                            invitation_status = 'accepted', accepted_at = COALESCE(accepted_at, now()), confirmed_revision = $3
+         WHERE id = $1 AND deleted_at IS NULL AND invitation_status IN ('registered', 'invited', 'accepted', 'reconfirmation_pending', 'declined') RETURNING id, event_id, invitation_status`,
+        [guest.id, profileId, currentEvent.rows[0].revision],
       );
       if (!updated.rowCount) {
         await client.query('ROLLBACK');
         return reply.code(409).send({ error: 'invitation_unavailable' });
       }
+      await client.query(
+        `INSERT INTO guest_responses (event_id, guest_id, event_revision, response)
+         VALUES ($1, $2, $3, 'accepted')`,
+        [guest.event_id, guest.id, currentEvent.rows[0].revision],
+      );
       await client.query(
         `INSERT INTO audit_events (event_id, guest_id, action) VALUES ($1, $2, 'invitation_accepted')`,
         [guest.event_id, guest.id],
@@ -117,6 +223,50 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     } finally {
       client.release();
     }
+  });
+
+  app.post('/v1/invitations/:token/decline', async (request, reply) => {
+    const token = inviteTokenSchema.safeParse((request.params as { token?: string }).token);
+    if (!token.success) return reply.code(404).send({ error: 'invitation_not_found' });
+    const hash = createHash('sha256').update(token.data).digest('hex');
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const lookup = await client.query(
+        `SELECT g.id, g.event_id FROM guests g WHERE g.deleted_at IS NULL
+         AND (g.invitation_token_hash = $1 OR EXISTS
+           (SELECT 1 FROM invitation_tokens t WHERE t.guest_id = g.id AND t.token_hash = $1))`, [hash],
+      );
+      if (!lookup.rowCount) {
+        await client.query('ROLLBACK'); return reply.code(404).send({ error: 'invitation_not_found' });
+      }
+      const event = await client.query('SELECT revision, status FROM events WHERE id = $1 FOR SHARE', [lookup.rows[0].event_id]);
+      const guest = await client.query('SELECT invitation_status FROM guests WHERE id = $1 FOR UPDATE', [lookup.rows[0].id]);
+      if (!event.rowCount || ['finished', 'cancelled'].includes(event.rows[0].status)
+        || !guest.rowCount || guest.rows[0].invitation_status === 'attended') {
+        await client.query('ROLLBACK'); return reply.code(409).send({ error: 'invitation_unavailable' });
+      }
+      if (guest.rows[0].invitation_status === 'declined') {
+        await client.query('ROLLBACK'); return { status: 'declined', guestId: lookup.rows[0].id };
+      }
+      await client.query(
+        `UPDATE guests SET invitation_status = 'declined', confirmed_revision = NULL WHERE id = $1`,
+        [lookup.rows[0].id],
+      );
+      await client.query(
+        `INSERT INTO guest_responses (event_id, guest_id, event_revision, response)
+         VALUES ($1, $2, $3, 'declined')`,
+        [lookup.rows[0].event_id, lookup.rows[0].id, event.rows[0].revision],
+      );
+      await client.query(
+        `INSERT INTO audit_events (event_id, guest_id, action) VALUES ($1, $2, 'invitation_declined')`,
+        [lookup.rows[0].event_id, lookup.rows[0].id],
+      );
+      await client.query('COMMIT');
+      return { status: 'declined', guestId: lookup.rows[0].id };
+    } catch (error) {
+      await client.query('ROLLBACK'); throw error;
+    } finally { client.release(); }
   });
 
   app.post('/v1/events/:eventId/scan', async (request, reply) => {
@@ -156,6 +306,15 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     const client = await db.connect();
     try {
       await client.query('BEGIN');
+      const currentEvent = await client.query(
+        'SELECT revision, status, starts_at, ends_at FROM events WHERE id = $1 FOR SHARE', [eventId.data],
+      );
+      const currentTime = Date.now();
+      if (!currentEvent.rowCount || currentEvent.rows[0].status !== 'active'
+        || currentTime < new Date(currentEvent.rows[0].starts_at).getTime()
+        || currentTime > new Date(currentEvent.rows[0].ends_at).getTime()) {
+        await client.query('ROLLBACK'); return reply.code(409).send({ error: 'event_not_active' });
+      }
       if (identification.status !== 'match') {
         const reason = identification.status;
         await client.query(`INSERT INTO access_events (event_id, action, reason) VALUES ($1, 'denied', $2)`, [eventId.data, reason]);
@@ -163,7 +322,7 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
         return { action: 'denied', reason };
       }
       const guest = await client.query(
-        `SELECT id, name, invitation_status, person_face_id FROM guests
+        `SELECT id, name, invitation_status, person_face_id, confirmed_revision FROM guests
          WHERE person_face_id = $1 AND event_id = $2 AND deleted_at IS NULL
          ORDER BY CASE WHEN invitation_status IN ('accepted', 'attended') THEN 0 ELSE 1 END, created_at
          LIMIT 1 FOR UPDATE`, [identification.profileId, eventId.data],
@@ -196,13 +355,17 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
         await client.query('COMMIT');
         return { action: 'denied', reason: 'not_invited', guestName: knownPerson.rows[0]?.name };
       }
-      if (!['accepted', 'attended'].includes(guest.rows[0].invitation_status)) {
+      if (!['accepted', 'attended'].includes(guest.rows[0].invitation_status)
+        || guest.rows[0].confirmed_revision !== currentEvent.rows[0].revision) {
+        const reason = guest.rows[0].invitation_status === 'reconfirmation_pending'
+          || guest.rows[0].confirmed_revision !== currentEvent.rows[0].revision
+          ? 'reconfirmation_required' : 'invitation_not_accepted';
         await client.query(
-          `INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', 'invitation_not_accepted', $3)`,
-          [eventId.data, guest.rows[0].id, identification.confidence],
+          `INSERT INTO access_events (event_id, guest_id, action, reason, confidence) VALUES ($1, $2, 'denied', $3, $4)`,
+          [eventId.data, guest.rows[0].id, reason, identification.confidence],
         );
         await client.query('COMMIT');
-        return { action: 'denied', reason: 'invitation_not_accepted', guestName: guest.rows[0].name };
+        return { action: 'denied', reason, guestName: guest.rows[0].name };
       }
       const guestId = guest.rows[0].id;
       const last = await client.query(
@@ -273,8 +436,10 @@ export function registerFlows(app: FastifyInstance, db: pg.Pool, config: Config)
     reply.header('Cache-Control', 'no-store');
     if (identification.status !== 'match') return { matched: false, reason: identification.status };
     const guest = await db.query(
-      `SELECT id, name FROM guests WHERE person_face_id = $1 AND event_id = $2 AND deleted_at IS NULL
-       AND invitation_status IN ('accepted', 'attended') ORDER BY created_at LIMIT 1`,
+      `SELECT g.id, g.name FROM guests g JOIN events e ON e.id = g.event_id
+       WHERE g.person_face_id = $1 AND g.event_id = $2 AND g.deleted_at IS NULL
+       AND g.invitation_status IN ('accepted', 'attended') AND g.confirmed_revision = e.revision
+       ORDER BY g.created_at LIMIT 1`,
       [identification.profileId, eventId.data],
     );
     if (!guest.rowCount) {

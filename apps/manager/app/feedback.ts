@@ -8,7 +8,7 @@ const fieldNames: Record<string, string> = {
   newPassword: 'nova senha', temporaryPassword: 'senha temporária', clientId: 'cliente',
   clientIds: 'clientes permitidos', role: 'perfil', venue: 'local', startsAt: 'início',
   endsAt: 'fim', timezone: 'fuso horário', phoneE164: 'celular', guestIds: 'convidados',
-  channels: 'canais de envio',
+  channels: 'canais de envio', reason: 'motivo da alteração',
 };
 
 const explanations: Record<string, string> = {
@@ -37,6 +37,15 @@ const explanations: Record<string, string> = {
   guest_not_found: 'Este convidado não foi encontrado. Atualize a página e tente novamente.',
   event_not_activatable: 'Este evento não pode ser ativado no estado atual.',
   event_not_active: 'Este evento não está ativo. Ative o evento antes de finalizá-lo.',
+  event_immutable: 'Eventos finalizados ou cancelados não podem ser alterados.',
+  event_identity_locked: 'O cliente e o identificador externo não podem mudar após cadastrar convidados.',
+  event_has_access_history: 'O evento já registrou entradas. Apenas a ampliação do horário de término é permitida.',
+  change_reason_required: 'Informe o motivo da alteração para preservar o histórico do evento.',
+  event_unchanged: 'Nenhum dado do evento foi alterado.',
+  event_delete_forbidden: 'Somente um rascunho sem convidados nem histórico pode ser excluído. Cancele o evento.',
+  event_changed_during_send: 'Os dados do evento mudaram durante o envio. Atualize a página e tente novamente.',
+  event_change_not_found: 'Não há alteração de evento para notificar.',
+  event_change_not_applicable: 'Este convidado ainda não recebeu convite e não precisa desse aviso.',
   event_unavailable: 'Este evento foi encerrado ou cancelado. Não é possível enviar convites.',
   invitation_unavailable: 'Este convite não está mais disponível para envio.',
   invitation_app_unavailable: 'O site de convites está indisponível. Procure o administrador.',
@@ -80,6 +89,9 @@ export function deliveryErrorMessage(code: string | null): string {
   const messages: Record<string, string> = {
     email_not_configured: 'O envio por e-mail ainda não está configurado.',
     whatsapp_not_configured: 'O envio por WhatsApp ainda não está configurado.',
+    event_update_whatsapp_not_configured: 'Configure um modelo aprovado do WhatsApp para avisar alterações de evento.',
+    event_info_whatsapp_not_configured: 'Configure um modelo aprovado do WhatsApp para avisos informativos de evento.',
+    event_cancel_whatsapp_not_configured: 'Configure um modelo aprovado do WhatsApp para avisar cancelamentos.',
     missing_destination: 'O convidado não tem contato para este canal.',
   };
   if (!code) return 'Não foi possível concluir o envio.';
@@ -105,6 +117,7 @@ export function accessReasonMessage(code: string | null): string {
     already_inside: 'Entrada já registrada para este convidado.',
     not_inside: 'Este convidado ainda não registrou entrada.',
     guest_not_eligible: 'Convite não aceito ou cadastro facial ausente.',
+    reconfirmation_required: 'O convidado precisa confirmar os novos dados do evento.',
     invalid_capture: 'A imagem capturada não pôde ser analisada.',
   };
   return code ? reasons[code] ?? 'Acesso negado. Confira o convite e o cadastro.' : 'Motivo não informado.';

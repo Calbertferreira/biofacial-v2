@@ -76,7 +76,8 @@ try {
   const base = `http://127.0.0.1:${apiPort}`;
   api = spawn(process.execPath, [resolve('apps/api/dist/server.js')], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(apiPort), FACE_ENGINE_URL: `http://127.0.0.1:${facePort}` },
+    env: { ...process.env, PORT: String(apiPort), FACE_ENGINE_URL: `http://127.0.0.1:${facePort}`,
+      RESEND_API_KEY: '', WHATSAPP_ACCESS_TOKEN: '' },
     stdio: 'ignore',
   });
   let ready = false;
@@ -107,6 +108,9 @@ try {
   const token = new URL(guest.invitationUrl).pathname.split('/').at(-1);
   const pending = await call(base, `/v1/invitations/${token}`);
   if (pending.invitationStatus !== 'registered' || pending.guestName !== 'Convidado E2E') throw new Error('Convite inicial incorreto');
+  await call(base, `/v1/invitations/${token}/accept`, {
+    method: 'POST', body: { consent: true }, expected: 422,
+  });
 
   const accepted = await call(base, `/v1/invitations/${token}/accept`, {
     method: 'POST', body: { consent: true, imageBase64: faceImage },
@@ -114,6 +118,39 @@ try {
   if (accepted.status !== 'accepted' || accepted.guestId !== guest.id) throw new Error('Aceite incorreto');
   const invitation = await call(base, `/v1/invitations/${token}`);
   if (invitation.invitationStatus !== 'accepted') throw new Error('Convite não foi atualizado');
+  const changedEvent = await call(base, `/v1/events/${event.id}`, {
+    method: 'PATCH', key: process.env.ADMIN_API_KEY,
+    body: { venue: 'Novo local de testes', reason: 'Mudança de local para verificar a reconfirmação.' },
+  });
+  if (changedEvent.revision !== 2 || changedEvent.reconfirmationCount !== 1 || !changedEvent.notificationRequired) {
+    throw new Error('Mudança não exigiu reconfirmação e aviso');
+  }
+  const pendingAgain = await call(base, `/v1/invitations/${token}`);
+  if (pendingAgain.invitationStatus !== 'reconfirmation_pending' || !pendingAgain.hasStoredImage || pendingAgain.venue !== 'Novo local de testes') {
+    throw new Error('Convite alterado não mostrou a necessidade de reconfirmação');
+  }
+  const notice = await call(base, `/v1/events/${event.id}/invitations/send`, {
+    method: 'POST', key: process.env.ADMIN_API_KEY,
+    body: { guestIds: [guest.id], channels: ['email'], purpose: 'event_change' },
+  });
+  if (notice.items[0].status !== 'failed' || notice.items[0].error !== 'email_not_configured') {
+    throw new Error('Falha de aviso não foi mostrada ao operador');
+  }
+  await call(base, `/v1/events/${event.id}/activate`, { method: 'POST', key: process.env.ADMIN_API_KEY });
+  const staleScan = await call(base, `/v1/events/${event.id}/scan`, {
+    method: 'POST', key: process.env.SCANNER_API_KEY, body: { imageBase64: faceImage },
+  });
+  if (staleScan.action !== 'denied' || staleScan.reason !== 'reconfirmation_required') {
+    throw new Error('Scanner liberou um aceite anterior à mudança');
+  }
+  const declined = await call(base, `/v1/invitations/${token}/decline`, { method: 'POST' });
+  if (declined.status !== 'declined') throw new Error('Recusa da nova data não foi registrada');
+  const reconfirmed = await call(base, `/v1/invitations/${token}/accept`, {
+    method: 'POST', body: { consent: true },
+  });
+  if (reconfirmed.status !== 'accepted') throw new Error('Reconfirmação sem nova selfie falhou');
+  const responses = await mockDb.query('SELECT event_revision, response FROM guest_responses WHERE guest_id = $1 ORDER BY responded_at, id', [guest.id]);
+  if (responses.rows.length !== 3 || responses.rows.at(-1).event_revision !== 2) throw new Error('Histórico de respostas não foi preservado');
 
   const otherEvent = await call(base, '/v1/events', {
     method: 'POST', key: process.env.ADMIN_API_KEY, expected: 201,
@@ -127,20 +164,14 @@ try {
   });
   const otherToken = new URL(otherGuest.invitationUrl).pathname.split('/').at(-1);
   const otherInvitation = await call(base, `/v1/invitations/${otherToken}`);
-  if (otherInvitation.hasStoredImage) throw new Error('Convite novo foi aceito antes da comparação facial');
+  if (!otherInvitation.hasStoredImage || otherInvitation.invitationStatus !== 'registered') {
+    throw new Error('Convite novo não reconheceu o cadastro facial existente');
+  }
   await call(base, `/v1/invitations/${otherToken}/accept`, {
-    method: 'POST', body: { consent: true }, expected: 422,
-  });
-  await call(base, `/v1/invitations/${otherToken}/accept`, {
-    method: 'POST', body: { consent: true, imageBase64: unknownImage }, expected: 409,
-  });
-  const otherPending = await call(base, `/v1/invitations/${otherToken}`);
-  if (otherPending.invitationStatus !== 'registered') throw new Error('Selfie incompatível aceitou o convite');
-  await call(base, `/v1/invitations/${otherToken}/accept`, {
-    method: 'POST', body: { consent: true, imageBase64: faceImage },
+    method: 'POST', body: { consent: true },
   });
   const otherAccepted = await call(base, `/v1/invitations/${otherToken}`);
-  if (otherAccepted.invitationStatus !== 'accepted' || !otherAccepted.hasStoredImage) throw new Error('Convite do segundo evento não foi verificado');
+  if (otherAccepted.invitationStatus !== 'accepted' || !otherAccepted.hasStoredImage) throw new Error('Convite do segundo evento não reutilizou o cadastro');
   const thirdEvent = await call(base, '/v1/events', {
     method: 'POST', key: process.env.ADMIN_API_KEY, expected: 201,
     body: { name: `E2E Terceiro evento ${new Date(now).toISOString()}`,
@@ -174,7 +205,6 @@ try {
     throw new Error('Convidado conhecido sem vínculo ativo não recebeu a mensagem de não convidado');
   }
 
-  await call(base, `/v1/events/${event.id}/activate`, { method: 'POST', key: process.env.ADMIN_API_KEY });
   await call(base, `/v1/events/${event.id}/scan`, {
     method: 'POST', body: { imageBase64: unknownImage }, expected: 401,
   });
@@ -192,7 +222,41 @@ try {
   const afterEntry = await call(base, `/v1/events/${event.id}/guests`, { key: process.env.ADMIN_API_KEY });
   if (afterEntry.items.find(item => item.id === guest.id)?.invitationStatus !== 'attended') throw new Error('Status de comparecimento não atualizado');
   const history = await call(base, `/v1/events/${event.id}/access-events`, { key: process.env.ADMIN_API_KEY });
-  if (history.items.map(item => item.action).join(',') !== 'denied,entry,exit') throw new Error('Histórico de acesso incorreto');
+  if (history.items.map(item => item.action).join(',') !== 'denied,denied,entry,exit') throw new Error('Histórico de acesso incorreto');
+  const extension = await call(base, `/v1/events/${event.id}`, {
+    method: 'PATCH', key: process.env.ADMIN_API_KEY,
+    body: { endsAt: new Date(now + 30 * 60_000).toISOString(), reason: 'Ampliação do horário final do evento.' },
+  });
+  if (extension.revision !== 2 || extension.reconfirmationCount !== 0 || !extension.notificationRequired) {
+    throw new Error('Ampliação do horário deve avisar sem exigir nova confirmação');
+  }
+  await call(base, `/v1/events/${event.id}`, {
+    method: 'PATCH', key: process.env.ADMIN_API_KEY, expected: 409,
+    body: { venue: 'Outro local', reason: 'Mudança depois de registrar entradas.' },
+  });
+  await call(base, `/v1/events/${thirdEvent.id}/cancel`, {
+    method: 'POST', key: process.env.ADMIN_API_KEY,
+    body: { reason: 'Cancelamento de teste após o envio de convites.' },
+  });
+  const cancelledInvitation = await call(base, `/v1/invitations/${thirdToken}`);
+  if (cancelledInvitation.eventStatus !== 'cancelled') throw new Error('Convite não mostrou o cancelamento');
+  const cancellationNotice = await call(base, `/v1/events/${thirdEvent.id}/invitations/send`, {
+    method: 'POST', key: process.env.ADMIN_API_KEY,
+    body: { guestIds: [thirdGuest.id], channels: ['email'], purpose: 'event_cancelled' },
+  });
+  if (cancellationNotice.items[0].status !== 'failed' || cancellationNotice.items[0].error !== 'email_not_configured') {
+    throw new Error('Falha do aviso de cancelamento não foi registrada');
+  }
+  await call(base, `/v1/invitations/${thirdToken}/accept`, {
+    method: 'POST', body: { consent: true }, expected: 409,
+  });
+  const disposable = await call(base, '/v1/events', {
+    method: 'POST', key: process.env.ADMIN_API_KEY, expected: 201,
+    body: { name: 'Rascunho descartável', startsAt: new Date(now + 60_000).toISOString(),
+      endsAt: new Date(now + 120_000).toISOString(), timezone: 'America/Sao_Paulo', venue: 'Teste' },
+  });
+  await call(base, `/v1/events/${disposable.id}`, { method: 'DELETE', key: process.env.ADMIN_API_KEY });
+  await call(base, `/v1/events/${disposable.id}`, { key: process.env.ADMIN_API_KEY, expected: 404 });
 
   console.log(JSON.stringify({ result: 'passed', eventId: event.id, guestId: guest.id, invitation: invitation.invitationStatus, access: history.items.map(item => item.action) }));
 } finally {

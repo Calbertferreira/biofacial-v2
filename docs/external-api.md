@@ -22,7 +22,8 @@ Envie `Authorization: Bearer <accessToken>` em toda rota administrativa. Primeir
 | GET, POST | `/v1/users` | leitura: todos conforme papel; escrita: `adm` ou `gestor` para outro gestor | `name`, `email`, `role`, `clientIds`, `temporaryPassword` |
 | PATCH | `/v1/users/{userId}` | `adm` | nome, email, papel, clientes, ativo, senha temporária |
 | GET, POST | `/v1/events` | leitura: escopo do papel; escrita: `adm`/`gestor` | `clientId`, `externalId?`, `name`, `startsAt`, `endsAt`, `timezone`, `venue` |
-| GET, PATCH | `/v1/events/{eventId}` | leitura: escopo; escrita: `adm`/`gestor` | subconjunto dos campos do evento; só `adm` muda cliente |
+| GET, PATCH, DELETE | `/v1/events/{eventId}` | leitura: escopo; escrita: `adm`/`gestor` | PATCH aceita campos do evento e `reason?`; DELETE só rascunho sem vínculos |
+| POST | `/v1/events/{eventId}/cancel` | `adm`/`gestor` | `{ "reason": "mínimo 10 caracteres" }`; preserva histórico |
 | GET, POST | `/v1/events/{eventId}/guests` | leitura: escopo; escrita: `adm`/`gestor` | `name`, `email?`, `phoneE164?` |
 | PATCH | `/v1/events/{eventId}/guests/{guestId}` | `adm`/`gestor` | nome e contatos opcionais |
 | POST | `/v1/events/{eventId}/activate` | `adm`/`gestor` | corpo vazio; `draft`/`published` → `active` |
@@ -30,6 +31,8 @@ Envie `Authorization: Bearer <accessToken>` em toda rota administrativa. Primeir
 | GET | `/v1/events/{eventId}/access-events` | leitura no escopo | até 500 ações, cronológicas |
 
 `externalId` de cliente é único; cliente com mesmo ID externo pode ter nome atualizado na criação repetida. `externalId` de evento é único por cliente, mas uma repetição conflita (409), sem atualização automática. E-mail de usuário é único sem diferenciar maiúsculas. Convidado requer ao menos e-mail ou telefone E.164; combinações repetidas no evento conflitam. Criar convidado devolve `invitationUrl`, que deve ser tratado como segredo. Datas exigem offset, por exemplo `2026-10-01T18:00:00-03:00`.
+
+Após cadastrar convidados, `clientId` e `externalId` do evento ficam bloqueados. Mudança de data, horário, fuso ou local exige `reason` e pode exigir nova confirmação dos convidados; a resposta inclui `reconfirmationCount`, `revision` e `notificationRequired`. Eventos com entrada/saída só permitem ampliar o término. Veja [regras completas](event-editing-and-reconfirmation.md).
 
 ```json
 {
@@ -45,13 +48,15 @@ Envie `Authorization: Bearer <accessToken>` em toda rota administrativa. Primeir
 
 ## Convite público
 
-`GET /v1/invitations/{token}` devolve nome do convidado, evento, horários, local, status e `hasFaceProfile`. `POST /v1/invitations/{token}/accept` recebe `{ "consent": true, "imageBase64": "..." }`; a imagem pode ser omitida se houver perfil reutilizável. O retorno é `{ "status": "accepted", "guestId": "..." }`. O token tem 64 caracteres hexadecimais e já autentica o convite; não precisa Bearer de operador. O URL individual não deve ser exposto em logs, analítica ou páginas de terceiros.
+`GET /v1/invitations/{token}` devolve nome do convidado, evento, horários, local, estado atual e `hasStoredImage`. `POST /v1/invitations/{token}/accept` recebe `{ "consent": true, "imageBase64": "..." }`; a imagem pode ser omitida se houver perfil reutilizável. O retorno é `{ "status": "accepted", "guestId": "..." }`. `POST /v1/invitations/{token}/decline` registra indisponibilidade. Após alteração relevante, o estado vira `reconfirmation_pending` e o aceite antigo não libera acesso. O token tem 64 caracteres hexadecimais e já autentica o convite; não precisa Bearer de operador. O URL individual não deve ser exposto em logs, analítica ou páginas de terceiros.
+
+`POST /v1/events/{eventId}/invitations/send` aceita `guestIds`, `channels` (`email`, `whatsapp`) e `purpose` opcional: `invitation`, `event_change` ou `event_cancelled`. Os dois últimos usam mensagens próprias; tentativas e resultados ficam em `invitation_deliveries`.
 
 ## Identificação versus registro de acesso
 
 `POST /v1/events/{eventId}/face-lookup` aceita JSON `{ "imageBase64": "..." }` ou bytes `image/jpeg`/`image/png`. Requer `adm` ou `gestor` vinculado. Responde `{ "matched": true, "guestId": "...", "guestName": "...", "confidence": 0.8 }` ou `{ "matched": false, "reason": "no_match|review|not_invited" }`. **Não grava entrada nem saída.**
 
-`POST /v1/events/{eventId}/scan` recebe `{ "imageBase64": "...", "direction": "entry" }` ou `"exit"`. Requer sessão de `adm`, `staff` ou gestor do cliente; aceita também `SCANNER_API_KEY` opcional de integração de máquina. `direction` é opcional no contrato da API e, sem ela, a API alterna conforme o último registro; a interface Scanner sempre envia a direção explícita. Respostas de sucesso: `{ "action": "entry|exit", "guestId": "...", "guestName": "...", "id": "...", "createdAt": "..." }`. Negativa: `{ "action": "denied", "reason": "no_match|review|guest_not_eligible|already_inside|not_inside" }`, podendo incluir identidade nos casos de duplicidade. Imagem inválida retorna 413/422 e cria negativa `invalid_capture`.
+`POST /v1/events/{eventId}/scan` recebe `{ "imageBase64": "...", "direction": "entry" }` ou `"exit"`. Requer sessão de `adm`, `staff` ou gestor do cliente; aceita também `SCANNER_API_KEY` opcional de integração de máquina. `direction` é opcional no contrato da API e, sem ela, a API alterna conforme o último registro; a interface Scanner sempre envia a direção explícita. Respostas de sucesso: `{ "action": "entry|exit", "guestId": "...", "guestName": "...", "id": "...", "createdAt": "..." }`. Negativa pode trazer `reconfirmation_required` quando o aceite pertence à versão anterior do evento, além de `no_match`, `review`, `already_inside` e `not_inside`. Imagem inválida retorna 413/422 e cria negativa `invalid_capture`.
 
 O evento precisa estar `active` **e** o horário atual deve estar entre `startsAt` e `endsAt`. Uma falha do motor retorna 503 `face_engine_unavailable`; nunca concede acesso. O registro é persistido em `access_events` para consultas posteriores.
 

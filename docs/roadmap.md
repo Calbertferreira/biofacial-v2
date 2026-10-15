@@ -16,4 +16,4 @@ Compilação/tipos e testes locais com substituto facial; fluxo HTTP do ambiente
 4. **Segurança administrativa:** MFA, recuperação de senha, limitação distribuída, auditoria de alterações e revisão de conexão TLS/certificado do banco pelo motor.
 5. **Acompanhamento:** check-ins em tempo real, cálculo de permanência, depoimentos moderados, gráficos, integração consentida com redes sociais e exportação após finalização.
 
-Os estados `published`, `cancelled`, `declined` e `expired` existem no banco, mas não têm fluxo completo publicado. As métricas do Manager são básicas e não devem ser apresentadas como medição de satisfação. A escolha do provedor de mensageria e as políticas jurídicas/operacionais ainda dependem de decisão do projeto.
+O cancelamento de evento, a resposta `declined` e a reconfirmação após mudança relevante estão implementados. `published` e `expired` continuam sem fluxo completo. As métricas do Manager são básicas e não devem ser apresentadas como medição de satisfação. A entrega real de mensagens depende de configuração e aprovação de modelos nos provedores; políticas jurídicas e operacionais ainda dependem de decisão do projeto.

@@ -204,7 +204,8 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
     if (actor.mustChangePassword) return reply.code(403).send({ error: 'password_change_required' });
     const id = uuid.safeParse((request.params as { eventId?: string }).eventId);
     if (!id.success) return reply.code(400).send({ error: 'invalid_event_id' });
-    const result = await db.query(`SELECT id, client_id AS "clientId", name, status, starts_at AS "startsAt", ends_at AS "endsAt", venue FROM events WHERE id = $1`, [id.data]);
+    const result = await db.query(`SELECT id, client_id AS "clientId", external_id AS "externalId", name, status,
+      starts_at AS "startsAt", ends_at AS "endsAt", timezone, venue, revision FROM events WHERE id = $1`, [id.data]);
     if (!result.rowCount || !canReadClient(actor, result.rows[0].clientId)) return reply.code(404).send({ error: 'event_not_found' });
     return result.rows[0];
   });
@@ -219,9 +220,11 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
     if (!event.rowCount || !canReadClient(actor, event.rows[0].client_id)) return reply.code(404).send({ error: 'event_not_found' });
     const result = await db.query(
       `SELECT g.id, g.name, g.email, g.phone_e164 AS "phoneE164", g.invitation_status AS "invitationStatus",
+              g.confirmed_revision AS "confirmedRevision",
               g.accepted_at AS "acceptedAt", g.send_attempts AS "sendAttempts",
               COALESCE((SELECT json_agg(json_build_object('id', d.id, 'attemptNumber', d.attempt_number,
-                'channel', d.channel, 'status', d.status, 'createdAt', d.created_at,
+                'channel', d.channel, 'status', d.status, 'purpose', d.purpose,
+                'eventRevision', d.event_revision, 'createdAt', d.created_at,
                 'providerMessageId', d.provider_message_id, 'error', d.error_message)
                 ORDER BY d.created_at DESC) FROM invitation_deliveries d WHERE d.guest_id = g.id), '[]'::json) AS deliveries
        FROM guests g WHERE g.event_id = $1 AND g.deleted_at IS NULL ORDER BY g.created_at DESC LIMIT 500`, [id.data],
@@ -238,8 +241,9 @@ export function registerManagement(app: FastifyInstance, db: pg.Pool): void {
     const eventId = uuid.safeParse(params.eventId);
     const guestId = uuid.safeParse(params.guestId);
     if (!eventId.success || !guestId.success) return reply.code(400).send({ error: 'invalid_input' });
-    const event = await db.query('SELECT client_id FROM events WHERE id = $1', [eventId.data]);
+    const event = await db.query('SELECT client_id, status FROM events WHERE id = $1', [eventId.data]);
     if (!event.rowCount || !canWriteClient(actor, event.rows[0].client_id)) return reply.code(404).send({ error: 'event_not_found' });
+    if (['finished', 'cancelled'].includes(event.rows[0].status)) return reply.code(409).send({ error: 'event_immutable' });
     const client = await db.connect();
     try {
       await client.query('BEGIN');

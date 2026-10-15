@@ -1,6 +1,6 @@
 # Modelo de dados e migrações
 
-O banco é PostgreSQL no Neon. O SQL é fonte de verdade: `packages/db/migrations/001_initial.sql` a `004_face_profiles.sql`. O migrador `packages/db/src/migrate.mjs` registra versões em `schema_migrations`. A aplicação usa `DATABASE_URL` com pooler; migrações usam preferencialmente `DATABASE_URL_UNPOOLED`.
+O banco é PostgreSQL no Neon. O SQL é fonte de verdade: `packages/db/migrations/001_initial.sql` a `009_event_cancellation_notices.sql`. O migrador `packages/db/src/migrate.mjs` registra versões em `schema_migrations`. A aplicação usa `DATABASE_URL` com pooler; migrações usam preferencialmente `DATABASE_URL_UNPOOLED`.
 
 ## Relações
 
@@ -16,6 +16,9 @@ erDiagram
   guests ||--o{ access_events : participa
   guests ||--o{ audit_events : participa
   guests ||--o| face_profiles : origina
+  events ||--o{ event_changes : revisa
+  guests ||--o{ guest_responses : responde
+  guests ||--o{ invitation_deliveries : recebe
 ```
 
 | Tabela | Dados essenciais | Regras |
@@ -24,17 +27,20 @@ erDiagram
 | `app_users` | identidade, email, hash da senha, papel, ativo, troca obrigatória, falhas/bloqueio | email único sem diferenciar caixa |
 | `user_clients` | usuário, cliente, concedido por | chave composta; gestor pode ter múltiplos clientes |
 | `user_sessions` | SHA-256 do token, usuário, validade, revogação | token em claro nunca é persistido |
-| `events` | cliente, `external_id`, nome, horários, fuso, local, status | fim > início; `external_id` único dentro do cliente |
-| `guests` | evento, nome, email/telefone, hash do link, status, aceite, `face_profile_id` | email ou telefone obrigatório; únicos por evento |
-| `face_profiles` | convidado original, vetor cifrado, modelo, criação | um perfil originário por convidado |
+| `events` | cliente, `external_id`, nome, horários, fuso, local, status, revisão | fim > início; `external_id` único dentro do cliente |
+| `guests` | evento, nome, email/telefone, hash do link, status, aceite, `person_face_id`, revisão confirmada | email ou telefone obrigatório; únicos entre registros não excluídos por evento |
+| `person_face_profiles` / `person_face_contacts` | foto e vetor cifrados, contatos associados | identidade reutilizada entre eventos após confirmação |
+| `invitation_tokens` / `invitation_deliveries` | links adicionais e tentativas de envio | registra canal, resultado, finalidade e revisão |
+| `event_changes` | ator, motivo, antes/depois, revisão | audita edição e cancelamento |
+| `guest_responses` | convidado, revisão, aceite/recusa, horário | preserva respostas anteriores após reagendamento |
 | `access_events` | evento, convidado opcional, ação, motivo, confiança, horário | entrada, saída ou negativa; negativa exige motivo |
 | `audit_events` | evento, convidado, ação, detalhes JSON, horário | atualmente registra aceite do convite |
 
-`guests.face_profile_id` é um identificador textual de perfil, mas **não tem chave estrangeira SQL** para `face_profiles.id`. A reutilização associa o mesmo perfil a outro convidado do mesmo cliente. Isso simplifica o vínculo, mas a integridade dessa referência depende da aplicação.
+`face_profiles` e `guests.face_profile_id` são estruturas legadas mantidas para compatibilidade de migração. O fluxo atual usa `person_face_profiles` e `guests.person_face_id`. A foto e o vetor são cifrados; a confirmação de presença continua vinculada ao convidado e à revisão do evento.
 
 ## Estados
 
-Evento: `draft` na criação; `published` existe no esquema, porém sem rota publicada para essa transição; `active` por `/activate` a partir de `draft` ou `published`; `finished` por `/finish` a partir de `active`; `cancelled` existe no esquema, sem rota específica. Convite: `pending` na criação e `accepted` no aceite; `declined`/`expired` existem no esquema, sem rotas correspondentes. A coluna `accepted_at` é preenchida uma vez. Um evento finalizado não pode ser reativado pela rota atual.
+Evento: `draft` na criação; `published` existe no esquema, sem rota publicada; `active` por `/activate`; `finished` por `/finish`; `cancelled` por `/cancel`. Convite: `registered`, `invited`, `accepted`, `reconfirmation_pending`, `attended` e `declined`; `expired` existe sem fluxo completo. `accepted_at` preserva o primeiro aceite, enquanto `guest_responses` guarda cada resposta por revisão. Evento finalizado ou cancelado não pode ser reativado pela rota atual. [Regras de edição](event-editing-and-reconfirmation.md).
 
 ## Integridade e consultas
 

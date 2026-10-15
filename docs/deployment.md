@@ -18,7 +18,7 @@ Estado conhecido em 28/09/2026: três projetos web Vercel, API pública Railway,
 ## Sequência de publicação
 
 1. Configurar Neon separado para o ambiente e criar segredos nos provedores. Usar URL de conexão com pooler para API e URL direta/unpooled para migração. Não imprimir conexões em logs.
-2. Rodar migrações 001–004 pelo comando `pnpm --filter @biofacial/db migrate` com `DATABASE_URL_UNPOOLED`. Verificar `schema_migrations` e `face_profiles`.
+2. Rodar migrações 001–009 pelo comando `pnpm --filter @biofacial/db migrate` com `DATABASE_URL_UNPOOLED`. Verificar `schema_migrations`, `person_face_profiles`, `event_changes` e `guest_responses`.
 3. Publicar motor facial no Railway com Dockerfile de `services/face-engine`. Conferir download e SHA-256 dos modelos, variáveis e `/health` apenas na rede interna.
 4. Publicar API Railway a partir da raiz do monorepo. Build: `pnpm install --frozen-lockfile`, build de `@biofacial/contracts` e `@biofacial/api`; start: `pnpm --filter @biofacial/api start`. Health check público: `/health`.
 5. Publicar três projetos Vercel com o mesmo repositório e diretórios de aplicação separados. O processo de build precisa ter acesso ao workspace e aos pacotes compartilhados. Configurar `API_INTERNAL_URL` para a API Railway HTTPS; no Manager, configurar o URL público do Scanner.

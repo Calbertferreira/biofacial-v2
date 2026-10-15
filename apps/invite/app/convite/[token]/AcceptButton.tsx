@@ -20,7 +20,7 @@ const messages: Record<string, string> = {
   invalid_input: 'Não foi possível validar os dados do convite. Atualize a página e tente novamente.',
 };
 
-export default function AcceptButton({ token, initialStatus, hasStoredImage }: { token: string; initialStatus: string; hasStoredImage: boolean }) {
+export default function AcceptButton({ token, initialStatus, eventStatus, hasStoredImage }: { token: string; initialStatus: string; eventStatus: string; hasStoredImage: boolean }) {
   const [status, setStatus] = useState(initialStatus);
   const [storedImage, setStoredImage] = useState(hasStoredImage);
   const [image, setImage] = useState<string | null>(null);
@@ -86,7 +86,8 @@ export default function AcceptButton({ token, initialStatus, hasStoredImage }: {
   }
 
   useEffect(() => {
-    if (initialStatus === 'registered' || initialStatus === 'invited' || initialStatus === 'accepted' && !hasStoredImage) {
+    if (!hasStoredImage && !['finished', 'cancelled'].includes(eventStatus)
+      && ['registered', 'invited', 'accepted', 'reconfirmation_pending', 'declined'].includes(initialStatus)) {
       void openFrontCamera();
     }
     // A câmera deve ser solicitada uma vez quando o convite é aberto.
@@ -114,27 +115,29 @@ export default function AcceptButton({ token, initialStatus, hasStoredImage }: {
     setMessage('Selfie capturada. Confira a imagem, marque a autorização e aceite o convite.');
     stopCamera();
   }
+  if (eventStatus === 'cancelled') return <p role="alert" className="error">Este evento foi cancelado. O convite não está mais disponível.</p>;
+  if (eventStatus === 'finished') return <p role="alert" className="error">Este evento foi finalizado. O convite não está mais disponível.</p>;
   if (status === 'attended') return <div className="success" role="status"><h2>Presença registrada</h2><p>Sua entrada no evento foi registrada.</p></div>;
   if (status === 'accepted' && storedImage) return <div className="success" role="status"><h2>Presença confirmada</h2><p>Seu convite está aceito. Seu cadastro facial foi confirmado para este evento. Apresente seu rosto na entrada.</p></div>;
-  if (status !== 'registered' && status !== 'invited' && status !== 'accepted') return <p role="alert" className="error">Este convite não está disponível.</p>;
+  if (!['registered', 'invited', 'accepted', 'reconfirmation_pending', 'declined'].includes(status)) return <p role="alert" className="error">Este convite não está disponível.</p>;
 
   return <section className="card">
     {faceMismatch && <div className="faceMismatchScreen" aria-hidden="true" />}
-    <h2>{status === 'accepted' ? 'Confirme seu cadastro facial' : 'Confirme sua presença'}</h2>
-    <p>{status === 'accepted' ? 'Seu convite já foi aceito, mas ainda falta confirmar seu rosto. Tire uma selfie para concluir a verificação.' : 'A câmera frontal será aberta para tirar sua selfie. Mantenha o rosto inteiro e os ombros visíveis. Apenas você deve estar na imagem.'}</p>
-    <div className="cameraControls"><button type="button" className="cameraButton" disabled={busy || cameraOpen || openingCamera} onClick={() => void openFrontCamera()}>{openingCamera ? 'Abrindo câmera...' : faceMismatch ? 'Tentar outra selfie' : image ? 'Tirar outra selfie' : 'Abrir câmera frontal'}</button></div>{cameraOpen && <div className="cameraCapture"><video ref={videoRef} autoPlay playsInline muted onLoadedMetadata={() => setCameraReady(true)} /><div className="cameraControls"><button type="button" className="cameraButton" disabled={!cameraReady} onClick={captureFrontCamera}>Usar esta selfie</button><button type="button" className="cameraButton secondary" onClick={() => { stopCamera(); setMessage('Captura cancelada. Abra a câmera frontal quando estiver pronto.'); }}>Cancelar</button></div></div>}
+    <h2>{status === 'reconfirmation_pending' ? 'Confirme os novos dados do evento' : status === 'declined' ? 'Você informou que não poderá comparecer' : storedImage ? 'Confirme sua presença' : status === 'accepted' ? 'Conclua seu cadastro facial' : 'Confirme sua presença'}</h2>
+    <p>{status === 'reconfirmation_pending' ? 'A data, o horário ou o local mudou desde seu último aceite. A confirmação anterior não autoriza sua entrada. Confira os dados acima e responda novamente; sua foto cadastrada será mantida.' : status === 'declined' ? 'Se seus planos mudaram, você pode confirmar sua presença enquanto o evento estiver aberto.' : storedImage ? 'Seu cadastro facial já existe. Aceite o convite para participar deste evento; não é preciso tirar outra selfie.' : status === 'accepted' ? 'Seu convite já foi aceito, mas ainda falta cadastrar seu rosto. Tire uma selfie para concluir o cadastro.' : 'Para seu primeiro cadastro facial, a câmera frontal será aberta. Mantenha o rosto inteiro e os ombros visíveis. Apenas você deve estar na imagem.'}</p>
+    {!storedImage && <div className="cameraControls"><button type="button" className="cameraButton" disabled={busy || cameraOpen || openingCamera} onClick={() => void openFrontCamera()}>{openingCamera ? 'Abrindo câmera...' : faceMismatch ? 'Tentar outra selfie' : image ? 'Tirar outra selfie' : 'Abrir câmera frontal'}</button></div>}{!storedImage && cameraOpen && <div className="cameraCapture"><video ref={videoRef} autoPlay playsInline muted onLoadedMetadata={() => setCameraReady(true)} /><div className="cameraControls"><button type="button" className="cameraButton" disabled={!cameraReady} onClick={captureFrontCamera}>Usar esta selfie</button><button type="button" className="cameraButton secondary" onClick={() => { stopCamera(); setMessage('Captura cancelada. Abra a câmera frontal quando estiver pronto.'); }}>Cancelar</button></div></div>}
     {image && <img className="preview" src={`data:image/jpeg;base64,${image}`} alt="Prévia da foto capturada" />}
-    <label className="consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> Autorizo o armazenamento cifrado de uma foto e do modelo facial vinculados ao meu e-mail e telefone para confirmar meus convites e identificar minha entrada nos eventos para os quais eu aceitar um convite.</label>
+    <label className="consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> {storedImage ? 'Aceito este convite e autorizo o uso do meu cadastro facial existente para identificar minha entrada neste evento.' : 'Aceito este convite e autorizo o armazenamento cifrado de uma foto e do modelo facial vinculados ao meu e-mail e telefone para identificar minha entrada nos eventos cujos convites eu aceitar.'}</label>
     {!consent && <p>Marque a autorização acima para liberar o aceite do convite.</p>}
-    {!image && <p>Tire uma selfie com a câmera frontal para continuar.</p>}
-    <button className="primary" disabled={busy || !consent || !image} onClick={async () => {
+    {!storedImage && !image && <p>Tire uma selfie com a câmera frontal para continuar.</p>}
+    <button className="primary" disabled={busy || !consent || (!storedImage && !image)} onClick={async () => {
       setBusy(true); setError(''); setMessage('');
       try {
         let response: Response;
         try {
           response = await fetch(`/api/invitations/${token}/accept`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ consent: true, imageBase64: image }),
+            body: JSON.stringify({ consent: true, ...(!storedImage && image ? { imageBase64: image } : {}) }),
           });
         } catch {
           throw new Error('Não foi possível conectar ao servidor. Confira sua conexão e tente novamente.');
@@ -151,7 +154,17 @@ export default function AcceptButton({ token, initialStatus, hasStoredImage }: {
         setStatus(body.status);
       } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha inesperada'); }
       finally { setBusy(false); }
-    }}>{busy ? 'Confirmando...' : status === 'accepted' ? 'Confirmar cadastro facial' : 'Aceitar convite'}</button>
+    }}>{busy ? 'Confirmando...' : status === 'reconfirmation_pending' ? 'Confirmar nova data e local' : status === 'accepted' ? 'Confirmar cadastro facial' : 'Aceitar convite'}</button>
+    {status !== 'declined' && <button type="button" className="cameraButton secondary" disabled={busy} onClick={async () => {
+      setBusy(true); setError(''); setMessage(''); stopCamera();
+      try {
+        const response = await fetch(`/api/invitations/${token}/decline`, { method: 'POST' });
+        const body = await response.json() as { error?: string; status?: string };
+        if (!response.ok || body.status !== 'declined') throw new Error(body.error ? messages[body.error] ?? 'Não foi possível registrar sua resposta.' : 'Não foi possível registrar sua resposta.');
+        setStatus('declined'); setConsent(false); setImage(null);
+      } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha inesperada'); }
+      finally { setBusy(false); }
+    }}>Não poderei comparecer</button>}
     {message && <p role="status">{message}</p>}
     {error && <p role="alert" className="error">{error}</p>}
   </section>;
